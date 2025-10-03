@@ -215,6 +215,9 @@
 		// const editor = lastBotMsg?.rich_content?.editor || '';
 		loadTextEditor = true; // TEXT_EDITORS.includes(editor) || !Object.values(EditorType).includes(editor);
 		loadEditor = !isSendingMsg && !isThinking && loadTextEditor && messageQueue.length === 0;
+		if (loadEditor) {
+			focusChatTextArea();
+		}
 	}
 
 	$: {
@@ -241,6 +244,7 @@
 		signalr.onMessageReceivedFromClient = onMessageReceivedFromClient;
 		signalr.onMessageReceivedFromCsr = onMessageReceivedFromClient;
 		signalr.onMessageReceivedFromAssistant = onMessageReceivedFromAssistant;
+		signalr.onIntermediateMessageReceivedFromAssistant = onIntermediateMessageReceivedFromAssistant;
 
 		signalr.beforeReceiveLlmStreamMessage = beforeReceiveLlmStreamMessage;
 		signalr.onReceiveLlmStreamMessage = onReceiveLlmStreamMessage;
@@ -270,10 +274,24 @@
 				handleChatAction(e);
 			}
 		});
+
+		await focusChatTextArea();
 	});
 
 	function handleLogoutAction() {
 		resetLocalStorage(true);
+	}
+
+	function focusChatTextArea() {
+		return new Promise(resolve => {
+			tick().then(() => {
+				const textarea = document.getElementById('chat-textarea');
+				if (textarea) {
+					textarea.focus();
+				}
+				resolve('focused');
+			});
+		});
 	}
 
 	/** @param {any} e */
@@ -505,6 +523,7 @@
 		if (!message.is_streaming) {
 			if (dialogs[dialogs.length - 1]?.message_id === message.message_id
 				&& dialogs[dialogs.length - 1]?.sender?.role === UserRole.Assistant
+				&& !dialogs[dialogs.length - 1]?.is_appended
 			) {
 				dialogs[dialogs.length - 1] = {
 					...message,
@@ -528,6 +547,30 @@
     }
 
 	/** @param {import('$conversationTypes').ChatResponseModel} message */
+    function onIntermediateMessageReceivedFromAssistant(message) {
+		const idx = dialogs.findLastIndex(x => x.is_dummy);
+		if (idx >= 0) {
+			dialogs.splice(idx, 0, {
+				...message,
+				is_chat_message: true,
+				is_appended: true
+			});
+		} else {
+			dialogs.push({
+				...message,
+				is_chat_message: true,
+				is_appended: true
+			});
+		}
+		
+		refresh();
+
+		if (isFrame) {
+			window.parent.postMessage(message, "*");
+		}
+    }
+
+	/** @param {import('$conversationTypes').ChatResponseModel} message */
 	function beforeReceiveLlmStreamMessage(message) {
 		isStreaming = true;
 		if (dialogs[dialogs.length - 1]?.message_id !== message.message_id
@@ -535,7 +578,8 @@
 		) {
 			dialogs.push({
 				...message,
-				is_chat_message: false
+				is_chat_message: false,
+				is_dummy: true
 			});
 		}
 		refresh();
@@ -549,7 +593,7 @@
 
 		if (!USE_MESSAGE_QUEUE) {
 			if (lastMsg?.sender?.role === UserRole.Assistant
-				&& lastMsg?.message_id === message.message_id
+				&& lastMsg?.is_dummy
 			) {
 				setTimeout(() => {
 					dialogs[dialogs.length - 1].text += message.text;
@@ -576,7 +620,7 @@
 
 			const lastMsg = dialogs[dialogs.length - 1];
 			if (lastMsg?.sender?.role !== UserRole.Assistant
-				|| lastMsg?.message_id !== message.message_id
+				|| !lastMsg?.is_dummy
 			) {
 				continue;
 			}
@@ -1812,7 +1856,7 @@
 													<RcMessage containerClasses={'bot-msg'} markdownClasses={'markdown-dark text-dark'} message={message} />
 													{#if message?.message_id === lastBotMsg?.message_id && message?.uuid === lastBotMsg?.uuid}
 														{
-															@const isStreamEnd = (message?.rich_content?.message?.text || message?.text) && !isStreaming && !isHandlingQueue
+															@const isStreamEnd = (message?.rich_content?.message?.text || message?.text) && !isStreaming && !isHandlingQueue && !isThinking
 														}	
 														<div style={`display: ${isStreamEnd ? 'flex' : 'none'}; gap: 10px; flex-wrap: wrap; margin-top: 5px;`}>
 															{#if PUBLIC_LIVECHAT_SPEAKER_ENABLED === 'true'}
@@ -1947,6 +1991,7 @@
 							<div class="col">
 								<div class="position-relative">
 									<ChatTextArea
+										id={'chat-textarea'}
 										className={`chat-input ${!isLite ? 'chat-more-util' : ''}`}
 										maxLength={maxTextLength}
 										disabled={isSendingMsg || isThinking || disableAction}

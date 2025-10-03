@@ -46,7 +46,11 @@ export const realtimeChat = {
                 event: "start",
                 body: {
                     payload: JSON.stringify({
-                        states: buildConversationUserStates(conversationId)
+                        states: buildConversationUserStates(conversationId),
+                        realtime_options: {
+                            input_audio_format: "pcm16",
+                            output_audio_format: "pcm16"
+                        }
                     })
                 }
             }));
@@ -91,8 +95,8 @@ export const realtimeChat = {
             }
         };
 
-        socket.onclose = () => {
-            console.log("Websocket closed");
+        socket.onclose = (e) => {
+            console.log("Websocket closed", e);
         };
       
         socket.onerror = (/** @type {Event} */ e) => {
@@ -120,7 +124,7 @@ export const realtimeChat = {
             socket.send(JSON.stringify({
                 event: 'disconnect'
             }));
-            socket.close();
+            socket.close(1000, "Normal Closure");
             socket = null;
         }
     }

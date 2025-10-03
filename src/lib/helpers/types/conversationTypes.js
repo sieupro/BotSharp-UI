@@ -155,6 +155,7 @@ IRichContent.prototype.language;
  * @property {string} conversation_id - The conversation id.
  * @property {import('$userTypes').UserModel} sender - The message sender.
  * @property {string} message_id - The message id.
+ * @property {string?} [message_label] - The message label.
  * @property {string} text - The message content.
  * @property {string} editor - The message editor.
  * @property {string} function - The function name.
@@ -167,6 +168,8 @@ IRichContent.prototype.language;
  * @property {boolean} has_message_files
  * @property {boolean} is_chat_message
  * @property {boolean} is_streaming
+ * @property {boolean} is_dummy
+ * @property {boolean} is_appended
  * @property {string} [indication]
  */
 
