@@ -1,75 +1,33 @@
 <script>
-	import InPlaceEdit from "../InPlaceEdit.svelte";
+	import InPlaceEdit from "../shared/InPlaceEdit.svelte";
 
-
-    /** @type {string} */
-    export let containerClasses = "";
-
-    /** @type {string} */
-    export let containerStyles = "";
-
-    /** @type {boolean} */
-    export let disableDefaultContainerStyles = false;
-
-    /** @type {string} */
-    export let containerRole = "presentation";
-
-    /** @type {string} */
-    export let containerId = "nav-item";
-
-    /** @type {string} */
-    export let navBtnClasses = "";
-
-    /** @type {string} */
-    export let navBtnStyles = "";
-
-    /** @type {boolean} */
-    export let disableDefaultNavBtnStyles = false;
-
-    /** @type {string} */
-    export let navBtnRole = "tab";
-
-    /** @type {string} */
-    export let navBtnId = "nav-item-id";
-
-    /** @type {string} */
-    export let navBtnText;
-
-    /** @type {boolean} */
-    export let active = false;
-
-    /** @type {boolean} */
-    export let disabled = false;
-
-    /** @type {boolean} */
-    export let allowEdit = false;
-
-    /** @type {number} */
-    export let maxEditLength = 30;
-
-    /** @type {string} */
-    export let editPlaceholder = "Please edit here...";
-
-    /** @type {boolean} */
-    export let allowDelete = false;
-
-    /** @type {string} */
-    export let dataBsToggle = "tab";
-
-    /** @type {string} */
-    export let dataBsTarget = "#nav-item-pane";
-
-    /** @type {string} */
-    export let ariaControls = "nav-item-tab-pane";
-
-    /** @type {() => void} */
-    export let onClick = () => {};
-
-    /** @type {() => void} */
-    export let onDelete = () => {};
-
-    /** @type {() => void} */
-    export let onInput = () => {};
+    let {
+        containerClasses = "",
+        containerStyles = "",
+        disableDefaultContainerStyles = false,
+        containerRole = "presentation",
+        containerId = "nav-item",
+        navBtnClasses = "",
+        navBtnStyles = "",
+        disableDefaultNavBtnStyles = false,
+        navBtnRole = "tab",
+        navBtnId = "nav-item-id",
+        navBtnText = $bindable(),
+        active = false,
+        disabled = false,
+        allowEdit = false,
+        maxEditLength = 30,
+        editPlaceholder = "Please edit here...",
+        allowDelete = false,
+        dataBsToggle = "tab",
+        dataBsTarget = "#nav-item-pane",
+        ariaControls = "nav-item-tab-pane",
+        onClick = () => {},
+        onDelete = () => {},
+        onInput = () => {},
+        /** @type {import('svelte').Snippet | undefined} */
+        deleteIcon = undefined
+    } = $props();
 
     /** @param {any} e */
     function handleTabClick(e) {
@@ -91,69 +49,123 @@
 </script>
 
 <li
-    class="{disableDefaultContainerStyles ? '' : 'nav-item tab-item'} {containerClasses}"
+    class="{disableDefaultContainerStyles ? '' : 'tab-item'} {containerClasses}"
     style={`${allowDelete ? 'display: flex;' : ''} ${containerStyles}`}
     id={containerId}
     role={containerRole}
 >
     <button
-        class="{disableDefaultNavBtnStyles ? '' : 'tab-btn nav-link'} {navBtnClasses}"
+        class="{disableDefaultNavBtnStyles ? '' : 'tab-btn'} {navBtnClasses}"
         class:active={active}
         style={`${navBtnStyles}`}
         id={navBtnId}
-        type="button" 
+        type="button"
         role={navBtnRole}
         data-bs-toggle={dataBsToggle}
         data-bs-target={dataBsTarget}
         aria-controls={ariaControls}
         aria-selected={`${active ? "true" : "false"}`}
-        disabled={disabled}
-        on:click={(e) => handleTabClick(e)}
+        {disabled}
+        onclick={(e) => handleTabClick(e)}
     >
         {#if allowEdit}
-            <InPlaceEdit 
-                bind:value={navBtnText} 
-                maxLength={maxEditLength} 
+            <InPlaceEdit
+                bind:value={navBtnText}
+                maxLength={maxEditLength}
                 placeholder={editPlaceholder}
-                on:input={handleTabInput}
+                onInput={handleTabInput}
             />
         {:else}
-            <div style="height: 100%;" class="line-align-center ellipsis">
-                <div>{navBtnText}</div>
-            </div>
+            <div class="tab-btn-label">{navBtnText}</div>
         {/if}
     </button>
-    
+
     {#if allowDelete}
-        <slot name="delete-icon">
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="line-align-center">
-                <i
-                    class="mdi mdi-minus-circle text-danger clickable"
-                    on:click={e => handleTabDelete(e)}
-                />
-            </div>
-        </slot>
+        {#if deleteIcon}
+            {@render deleteIcon()}
+        {:else}
+            <button
+                type="button"
+                class="tab-delete-btn"
+                aria-label="Delete tab"
+                title="Delete"
+                onclick={e => handleTabDelete(e)}
+            >
+                <i class="mdi mdi-minus-circle"></i>
+            </button>
+        {/if}
     {/if}
 </li>
 
 <style>
+    /* Base tab item — replaces Bootstrap .nav-item layout. */
     .tab-item {
         flex: 0 1 50%;
+        position: relative;
     }
 
+    /* Base tab button — replaces Bootstrap .nav-link styling.
+       Variant-specific colors (default vs secondary) and the active underline
+       come from NavBar's :global() rules. This block sets the layout, baseline
+       padding, font, and hover/disabled affordances. */
     .tab-btn {
+        position: relative;
         width: 100%;
         height: 100%;
-        border: none !important;
-        color: white;
+        margin: 0;
+        padding: 0.5rem 0.75rem;
+        border: 0;
+        background: transparent;
+        font-family: inherit;
         font-weight: 500;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--color-dark);
+        cursor: pointer;
         display: inline-flex;
+        align-items: center;
         justify-content: center;
+        transition: color 0.15s ease, background-color 0.15s ease;
     }
 
-    .tab-btn.active {
-        color: var(--bs-primary);
+    .tab-btn:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+    }
+
+    .tab-btn:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
+    .tab-btn-label {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Inline delete button shown alongside the tab when allowDelete=true. */
+    .tab-delete-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 0.25rem;
+        padding: 0 0.25rem;
+        border: 0;
+        background: transparent;
+        color: var(--color-danger);
+        font-size: 1.125rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: transform 0.15s ease, color 0.15s ease;
+    }
+    .tab-delete-btn:hover {
+        transform: scale(1.1);
+    }
+    .tab-delete-btn:focus-visible {
+        outline: 2px solid var(--color-danger);
+        outline-offset: 2px;
+        border-radius: 0.25rem;
     }
 </style>

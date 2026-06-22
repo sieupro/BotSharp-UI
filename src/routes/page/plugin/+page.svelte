@@ -1,42 +1,46 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import Breadcrumb from '$lib/common/Breadcrumb.svelte';
-	import HeadTitle from '$lib/common/HeadTitle.svelte';
+	import Breadcrumb from '$lib/common/shared/Breadcrumb.svelte';
+	import HeadTitle from '$lib/common/shared/HeadTitle.svelte';
 	import Plugins from './plugin-list.svelte';
-    import { getPlugins } from '$lib/services/plugin-service';
+	import { getPlugins } from '$lib/services/plugin-service';
 	import { PUBLIC_PLUGIN_DEFAULT_ICON } from '$env/static/public';
-	import PlainPagination from '$lib/common/PlainPagination.svelte';
+	import PlainPagination from '$lib/common/shared/PlainPagination.svelte';
 	import { _ } from 'svelte-i18n';
 	import { globalEventStore } from '$lib/helpers/store';
 	import { GlobalEvent } from '$lib/helpers/enums';
 	import {
 		getPagingQueryParams,
 		setUrlQueryParams,
-		goToUrl
+		goToUrl,
+		formatNumber
 	} from '$lib/helpers/utils/common';
 
 	const firstPage = 1;
 	const pageSize = 12;
+	let isPageMounted = false;
 
 	/** @type {import('$commonTypes').PagedItems<import('$pluginTypes').PluginDefModel>} */
-    let plugins = { items: [], count: 0 };
+	let plugins = $state({ items: [], count: 0 });
 
 	/** @type {import('$pluginTypes').PluginFilter} */
 	const initFilter = {
 		pager: { page: firstPage, size: pageSize, count: 0 }
 	};
 
-    /** @type {import('$pluginTypes').PluginFilter} */
-    let filter = { ... initFilter };
+	/** @type {import('$pluginTypes').PluginFilter} */
+	let filter = $state({ ...initFilter });
 
 	/** @type {import('$commonTypes').Pagination} */
-	let pager = filter.pager;
+	// svelte-ignore state_referenced_locally
+	let pager = $state(filter.pager);
 
 	/** @type {any} */
 	let unsubscriber;
 
-    onMount(async () => {
+	onMount(async () => {
+		isPageMounted = true;
 		const { pageNum, pageSizeNum } = getPagingQueryParams({
 			page: $page.url.searchParams.get("page"),
 			pageSize: $page.url.searchParams.get("pageSize")
@@ -67,9 +71,10 @@
 
 			getPagedPlugins();
 		});
-    });
+	});
 
 	onDestroy(() => {
+		isPageMounted = false;
 		unsubscriber?.();
 	});
 
@@ -106,7 +111,10 @@
 		setUrlQueryParams($page.url, [
 			{ key: 'page', value: `${pager.page}` },
 			{ key: 'pageSize', value: `${pager.size}` }
-		], () => goToUrl(`${$page.url.pathname}${$page.url.search}`));
+		], (url) => {
+			if (!isPageMounted) return;
+			goToUrl(`${url.pathname}${url.search}`);
+		});
 	}
 
 	/**
@@ -136,8 +144,27 @@
 	}
 </script>
 
-<HeadTitle title="{$_('Plugin')}" />
-<Breadcrumb title="{$_('Plugin')}" pagetitle="{$_('List')}" />
+<HeadTitle title={$_('Plugin')} />
+<Breadcrumb title={$_('Plugin')} pagetitle={$_('List')} />
 
-<Plugins plugins={plugins.items} />
-<PlainPagination pagination={pager} pageTo={pageTo} />
+<div class="flex flex-wrap">
+	<div class="w-full">
+		<div class="rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
+			<div class="border-b border-gray-100 px-6 py-4 dark:border-gray-700">
+				<div class="flex items-center gap-3">
+					<span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+						<i class="mdi mdi-puzzle-outline text-xl"></i>
+					</span>
+					<div class="grow">
+						<h5 class="mb-0 text-base font-semibold text-dark dark:text-gray-100">{$_('Plugin')} {$_('List')}</h5>
+						<p class="mb-0 text-xs text-muted">{formatNumber(pager.count)} {pager.count === 1 ? 'plugin' : 'plugins'} total</p>
+					</div>
+				</div>
+			</div>
+			<div class="p-4 sm:p-6">
+				<Plugins plugins={plugins.items} />
+				<PlainPagination pagination={pager} pageTo={pageTo} />
+			</div>
+		</div>
+	</div>
+</div>

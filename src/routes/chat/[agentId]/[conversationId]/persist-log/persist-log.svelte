@@ -1,6 +1,6 @@
 <script>
-    import { afterUpdate, beforeUpdate, onDestroy, onMount, tick } from 'svelte';
-    import { page } from '$app/stores';
+    import { onMount, tick } from 'svelte';
+    import { page } from '$app/state';
     import moment from 'moment';
     import { v4 as uuidv4 } from 'uuid';
     import 'overlayscrollbars/overlayscrollbars.css';
@@ -10,10 +10,10 @@
     import NavItem from '$lib/common/nav-bar/NavItem.svelte';
     import ContentLogElement from './content-log-element.svelte';
 	import ConversationStateLogElement from './conversation-state-log-element.svelte';
-	
+
     const contentLogTab = 1;
     const conversationStateLogTab = 2;
-    const conversationId = $page.params.conversationId;
+    const conversationId = page.params.conversationId;
     const utcNow = moment.utc().toDate();
 
     const scrollbarElements = [
@@ -27,25 +27,27 @@
         }
     ];
 
-    /** @type {import('$conversationTypes').ConversationContentLogModel[]} */
-    export let contentLogs = [];
-
-    /** @type {import('$conversationTypes').ConversationStateLogModel[]} */
-    export let convStateLogs = [];
-
-    /** @type {boolean} */
-    export let autoScroll = false;
-
-    /** @type {() => void} */
-    export let closeWindow;
-
-    /** @type {() => void} */
-    export let cleanScreen;
+    /**
+     * @type {{
+     *   contentLogs?: import('$conversationTypes').ConversationContentLogModel[],
+     *   convStateLogs?: import('$conversationTypes').ConversationStateLogModel[],
+     *   autoScroll?: boolean,
+     *   closeWindow: () => void,
+     *   cleanScreen: () => void
+     * }}
+     */
+    let {
+        contentLogs = $bindable([]),
+        convStateLogs = $bindable([]),
+        autoScroll = $bindable(false),
+        closeWindow,
+        cleanScreen
+    } = $props();
 
     /** @type {any[]} */
     let scrollbars = [];
     /** @type {number} */
-    let selectedTab = contentLogTab;
+    let selectedTab = $state(contentLogTab);
 
     /** @type {import('$conversationTypes').ConversationLogFilter} */
     let contentLogFilter = { size: 100, startTime: utcNow };
@@ -64,38 +66,48 @@
 		}
 	};
 
-    onMount(async () => {
-        await getChatContentLogs();
-        await getChatStateLogs();
+    onMount(() => {
+        // Load history, wait for Svelte to flush the new list items to the
+        // DOM, then attach OverlayScrollbars and scroll to bottom. Without
+        // the tick() wait, scrollHeight is read before the rows render and
+        // the viewport ends up parked at the top.
+        (async () => {
+            await Promise.all([getChatContentLogs(), getChatStateLogs()]);
+            await tick();
+            initScrollbars();
+            scroll();
+        })();
 
-        initScrollbars();
-		scroll();
+        return () => {
+            cleanLogs();
+        };
 	});
 
-    beforeUpdate(() => {});
-
-    afterUpdate(() => {
-        refresh();
-    });
-
-    onDestroy(() => {
-        cleanLogs();
-    });
-
-    function refresh() {
+    $effect(() => {
+        // Re-run whenever autoScroll or logs change
+        contentLogs;
+        convStateLogs;
         if (autoScroll) {
             scroll();
         }
-    }
+    });
 
+    let _scrollScheduled = false;
     /** @param {boolean} goToTop */
     function scroll(goToTop = false) {
-        // @ts-ignore
-        scrollbars.forEach(scrollbar => {
+        if (_scrollScheduled) {
+            return;
+        }
+        _scrollScheduled = true;
+        requestAnimationFrame(() => {
             setTimeout(() => {
-                const { viewport } = scrollbar.elements();
-                viewport.scrollTo({ top: goToTop ? 0 : viewport.scrollHeight, behavior: 'smooth' });
-            }, 200);
+                // @ts-ignore
+                scrollbars.forEach(scrollbar => {
+                    const { viewport } = scrollbar.elements();
+                    viewport.scrollTo({ top: goToTop ? 0 : viewport.scrollHeight, behavior: 'smooth' });
+                });
+                _scrollScheduled = false;
+            }, 150);
         });
     }
 
@@ -113,6 +125,7 @@
     async function getChatContentLogs() {
         if (!contentLogFilter.startTime) return;
 
+        // @ts-ignore
         const pagedContentLogs = await getContentLogs(conversationId, contentLogFilter);
         contentLogFilter = {
             ...contentLogFilter,
@@ -130,6 +143,7 @@
     async function getChatStateLogs() {
         if (!stateLogFilter.startTime) return;
 
+        // @ts-ignore
         const pagedStateLogs = await getStateLogs(conversationId, stateLogFilter);
         stateLogFilter = {
             ...stateLogFilter,
@@ -172,75 +186,77 @@
     }
 </script>
 
-<div class="chat-log">
-    <div class="card mb-0 log-background log-flex">
-        <div class="log-close-btn padding-side log-header">
+
+<div class="pl-root font-code">
+    <div class="pl-card">
+        <div class="pl-header-bar">
             <div>
                 <button
                     type="button"
-                    class="btn btn-sm btn-secondary btn-rounded chat-send waves-effect waves-light"
+                    class="pl-action-btn pl-action-btn-secondary"
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                     title="Clean log"
-                    on:click={() => handleCleanScreen()}
+                    onclick={() => handleCleanScreen()}
                 >
-                    <i class="bx bx-trash" />
+                    <i class="bx bx-trash"></i>
                 </button>
             </div>
-            <div>
+            <div class="pl-action-group">
                 <button
                     type="button"
-                    class="btn btn-sm btn-primary chat-send waves-effect waves-light"
+                    class="pl-action-btn pl-action-btn-primary"
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                     title="Scroll to top"
-                    on:click={() => goToTopLog()}
+                    onclick={() => goToTopLog()}
                 >
-                    <i class="mdi mdi-chevron-double-up" />
+                    <i class="mdi mdi-chevron-double-up"></i>
                 </button>
                 <button
                     type="button"
-                    class="btn btn-sm btn-light chat-send waves-effect waves-light"
+                    class="pl-action-btn pl-action-btn-light"
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                     title="Scroll to bottom"
-                    on:click={() => scroll()}
+                    onclick={() => scroll()}
                 >
-                    <i class="mdi mdi-chevron-double-down" />
+                    <i class="mdi mdi-chevron-double-down"></i>
                 </button>
             </div>
             <div>
                 <button
                     type="button"
-                    class="btn btn-sm btn-secondary btn-rounded chat-send waves-effect waves-light"
-                    on:click={() => closeWindow()}
+                    class="pl-action-btn pl-action-btn-secondary"
+                    aria-label="Close log window"
+                    onclick={() => closeWindow()}
                 >
-                    <i class="mdi mdi-window-close" />
+                    <i class="mdi mdi-window-close"></i>
                 </button>
             </div>
         </div>
 
-        <div class="content-log-scrollbar log-list padding-side log-body" class:hide={selectedTab !== contentLogTab}>
-            <ul>
+        <div class="pl-scroll-area content-log-scrollbar" class:pl-hide={selectedTab !== contentLogTab}>
+            <ul class="pl-list">
                 {#each contentLogs as log (log.uid)}
                     <ContentLogElement data={log} />
                 {/each}
             </ul>
         </div>
 
-        <div class="conv-state-log-scrollbar log-list padding-side log-body" class:hide={selectedTab !== conversationStateLogTab}>
-            <ul>
+        <div class="pl-scroll-area conv-state-log-scrollbar" class:pl-hide={selectedTab !== conversationStateLogTab}>
+            <ul class="pl-list">
                 {#each convStateLogs as log (log.uid)}
                     <ConversationStateLogElement data={log} />
                 {/each}
             </ul>
         </div>
 
-        <div class="log-footer nav-group">
+        <div class="pl-footer">
             <NavBar id={'persist-log-container'}>
                 <NavItem
                     navBtnId={'content-log-tab'}
-                    navBtnClasses={'log-footer-nav-btn'}
+                    navBtnStyles={'font-size: 0.75em;'}
                     dataBsTarget={'#content-log-tab-pane'}
                     ariaControls={'content-log-tab-pane'}
                     navBtnText={'Content Log'}
@@ -250,7 +266,7 @@
                 />
                 <NavItem
                     navBtnId={'conv-state-log-tab'}
-                    navBtnClasses={'log-footer-nav-btn'}
+                    navBtnStyles={'font-size: 0.75em;'}
                     dataBsTarget={'#conv-state-log-tab-pane'}
                     ariaControls={'conv-state-log-tab-pane'}
                     navBtnText={'Conversation States'}
@@ -262,3 +278,4 @@
         </div>
     </div>
 </div>
+

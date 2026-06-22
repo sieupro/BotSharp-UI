@@ -100,8 +100,9 @@ export async function getDialogs(conversationId, count = 100) {
  * @param {string} conversationId - The conversation id
  * @param {string} text - The text message sent to CSR
  * @param {import('$conversationTypes').MessageData?} data - Additional data
+ * @param {boolean} isStreamingMsg - whether it is a streaming message
  */
-export async function sendMessageToHub(agentId, conversationId, text, data = null) {
+export async function sendMessageToHub(agentId, conversationId, text, data = null, isStreamingMsg = false) {
     let url = replaceUrl(endpoints.conversationMessageUrl, {
         agentId: agentId,
         conversationId: conversationId
@@ -113,7 +114,8 @@ export async function sendMessageToHub(agentId, conversationId, text, data = nul
             text: text,
             states: totalStates,
             postback: data?.postback,
-            input_message_id: data?.inputMessageId
+            input_message_id: data?.inputMessageId,
+            is_streaming_msg: isStreamingMsg
         }).then(response => {
             resolve(response?.data);
         }).catch(err => {
@@ -185,7 +187,7 @@ export async function sendNotification(conversationId, text, data = null) {
  * @param {string} conversationId The conversation id
  * @param {string} messageId The target message id to delete
  * @param {boolean} isNewMessage If sending a new message while deleting a message
- * @returns {Promise<string>}
+ * @returns {Promise<any>}
  */
 export async function deleteConversationMessage(conversationId, messageId, isNewMessage = false) {
     let url = replaceUrl(endpoints.conversationMessageDeletionUrl, {
@@ -262,7 +264,7 @@ export async function updateConversationMessage(conversationId, request) {
  * @param {string} agentId The agent id
  * @param {string} converationId The conversation id
  * @param {any[]} files The conversation files
- * @returns {Promise<string>}
+ * @returns {Promise<any>}
  */
 export async function uploadConversationFiles(agentId, converationId, files) {
     const url = replaceUrl(endpoints.fileUploadUrl, {
@@ -290,6 +292,19 @@ export async function getAddressOptions(text) {
             address:  text
         }
     });
+    return response.data;
+}
+
+/**
+ * Stop streaming in a conversation
+ * @param {string} conversationId The conversation id
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function stopStreaming(conversationId) {
+    let url = replaceUrl(endpoints.stopStreamingUrl, {
+        conversationId: conversationId
+    });
+    const response = await axios.post(url);
     return response.data;
 }
 

@@ -16,7 +16,7 @@
 		maxResponseTokens: 128
 	};
 	const inputs = generateInput(initialData);
-	const procesor = (inputs) => inputs.temperature;
+	const procesor = (/** @type {any} */ inputs) => inputs.temperature;
 	const output = generateOutput(inputs, procesor);
 </script>
 
@@ -35,11 +35,4 @@
 	</NodeWrapper>
 </Node>
 
-<style>
-	.node-body {
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-	}
-</style>
+

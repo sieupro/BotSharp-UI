@@ -1,8 +1,9 @@
 <script>
-     /** @type {string} */
-     export let content;
+     /** @type {{ content: string }} */
+     let { content } = $props();
 </script>
 
-<div class="msg-disclaimer">
+<div class="rcd-box">
     {content}
 </div>
+

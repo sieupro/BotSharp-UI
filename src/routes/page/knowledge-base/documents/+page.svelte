@@ -3,119 +3,122 @@
     import { fly } from 'svelte/transition';
 	import { _ } from 'svelte-i18n';
 	import util from "lodash";
-	import Swal from 'sweetalert2';
 	import { v4 as uuidv4 } from 'uuid';
-	import {
-        Button,
-        Card,
-        CardBody,
-        Input,
-        Table,
-        Tooltip
-    } from '@sveltestrap/sveltestrap';
     import {
-        getVectorKnowledgeCollections,
-        getVectorKnowledgePageList,
-        searchVectorKnowledge,
-		createVectorKnowledgeData,
-		updateVectorKnowledgeData,
-		deleteVectorCollection,
-		deleteVectorKnowledgeData,
-		deleteAllVectorKnowledgeData,
-		createVectorCollection,
-		createVectorIndexes,
-		deleteVectorIndexes
+        getKnowledgeCollections,
+        getKnowledgePageList,
+        executeKnowledgeQuery,
+		createKnowledgeData,
+		updateKnowledgeData,
+		deleteKnowledgeCollection,
+		deleteKnowledgeData,
+		deleteAllKnowledgeData,
+		createKnowledgeCollection,
+		createKnowledgeIndexes,
+		deleteKnowledgeIndexes,
+		getKnowledgeProcessors
     } from '$lib/services/knowledge-base-service';
-	import Breadcrumb from '$lib/common/Breadcrumb.svelte';
-    import HeadTitle from '$lib/common/HeadTitle.svelte';
-	import Loader from '$lib/common/Loader.svelte';
-	import LoadingDots from '$lib/common/LoadingDots.svelte';
-	import LoadingToComplete from '$lib/common/LoadingToComplete.svelte';
-	import Select from '$lib/common/Select.svelte';
+	import ConfirmModal from '$lib/common/modals/ConfirmModal.svelte';
+	import Breadcrumb from '$lib/common/shared/Breadcrumb.svelte';
+    import HeadTitle from '$lib/common/shared/HeadTitle.svelte';
+	import Loader from '$lib/common/spinners/Loader.svelte';
+	import LoadingDots from '$lib/common/spinners/LoadingDots.svelte';
+	import LoadingToComplete from '$lib/common/spinners/LoadingToComplete.svelte';
+	import BotsharpTooltip from '$lib/common/tooltip/BotsharpTooltip.svelte';
+	import Select from '$lib/common/dropdowns/Select.svelte';
 	import {
-		KnowledgeCollectionType,
+		KnowledgeBaseType,
 		KnowledgePayloadName,
 		VectorDataSource,
 		VectorPayloadDataType
 	} from '$lib/helpers/enums';
+	import { DECIMAL_REGEX } from '$lib/helpers/constants';
+	import { formatNumber } from '$lib/helpers/utils/common';
 	import VectorItem from '../common/vector-table/vector-item.svelte';
 	import VectorItemEditModal from '../common/vector-table/vector-item-edit-modal.svelte';
 	import CollectionCreateModal from '../common/collection/collection-create-modal.svelte';
 	import VectorIndexModal from '../common/indexes/vector-index-modal.svelte';
-	import AdvancedSearch from '../common/search/advanced-search.svelte';
-	import KnowledgeDocumentUpload from './knowledge-document-upload.svelte';
-	import { DECIMAL_REGEX } from '$lib/helpers/constants';
-	
+	// import AdvancedSearch from '../common/search/advanced-search.svelte';
+	import KnowledgeFileUpload from './knowledge-file-upload.svelte';
+	import KnowledgeUploadModal from './knowledge-upload-modal.svelte';
+
+	const knowledgeType = KnowledgeBaseType.Document;
 	const pageSize = 8;
   	const duration = 2000;
 	const maxLength = 4096;
 	const step = 0.1;
+	const searchLimit = 10;
 	const enableVector = true;
-	const collectionType = KnowledgeCollectionType.Document;
-	
+
 	/** @type {string} */
-	let text = "";
-	let successText = "Done";
-	let errorText = "Error";
-    let confidence = '0.5';
+	let text = $state("");
+	let successText = $state("Done");
+	let errorText = $state("Error");
+    let confidence = $state('0.5');
+	let elapsedTime = $state('');
 
     /** @type {string} */
-    let selectedCollection;
+    let selectedCollection = $state('');
 
-	/** @type {import('$knowledgeTypes').KnowledgeSearchViewModel[]} */
-	let items = [];
+	/** @type {import('$knowledgeTypes').KnowledgeQueryViewModel[]} */
+	let items = $state([]);
 
 	/** @type {import('$commonTypes').LabelValuePair[]} */
-	let collections = [];
+	let collections = $state([]);
 
 	/** @type {string | null | undefined } */
-	let nextId;
+	let nextId = $state(null);
 
 	/** @type {number | null | undefined} */
-	let totalDataCount;
+	let totalDataCount = $state(undefined);
 
 	/** @type {string} */
-	let editCollection;
+	let editCollection = $state('');
 
-	/** @type {import('$knowledgeTypes').KnowledgeSearchViewModel | null} */
-	let editItem;
+	/** @type {import('$knowledgeTypes').KnowledgeQueryViewModel | null} */
+	let editItem = $state(null);
 
 	/** @type {string} */
-	let editModalTitle = "Edit knowledge";
+	let editModalTitle = $state("Edit knowledge");
 
 	/** @type {{ uuid: string, key: string, value: string, data_type: string, checked: boolean }[]} */
-	let searchItems = [{ uuid: uuidv4(), key: '', value: '', data_type: '', checked: true }];
+	let searchItems = $state([{ uuid: uuidv4(), key: '', value: '', data_type: '', checked: true }]);
 	/** @type {string} */
-	let selectedOperator = 'or';
+	let selectedOperator = $state('or');
 	/** @type {import('$knowledgeTypes').VectorFilterGroup[]} */
-	let innerSearchGroups = [];
+	let innerSearchGroups = $state([]);
 
-	let sortField = '';
-	let sortOrder = 'desc';
+	let sortField = $state('');
+	let sortOrder = $state('desc');
 	/** @type {import('$knowledgeTypes').VectorSort?} */
-	let innerSort = {
+	let innerSort = $state({
 		field: '',
 		order: 'desc'
-	};
+	});
+
+	/** @type {import('$commonTypes').LabelValuePair[]} */
+	let docProcessors = $state([]);
 
 	/** @type {boolean} */
-    let showDemo = true;
-    let isSearching = false;
-	let searchDone = false;
-	let isFromSearch = false;
-	let isLoading = false;
-	let isLoadingMore = false;
-	let isComplete = false;
-	let isError = false;
-	let isOpenEditKnowledge = false;
-	let isOpenCreateCollection = false;
-	let isOpenIndexModal = false;
-	let textSearch = false;
-	let isAdvSearchOn = false;
-	let disableSearchBtn = false;
+    let showDemo = $state(true);
+    let isSearching = $state(false);
+	let searchDone = $state(false);
+	let isFromSearch = $state(false);
+	let isLoading = $state(false);
+	let isLoadingMore = $state(false);
+	let isComplete = $state(false);
+	let isError = $state(false);
+	let isOpenEditKnowledge = $state(false);
+	let isOpenCreateCollection = $state(false);
+	let isOpenIndexModal = $state(false);
+	let textSearch = $state(false);
+	let isAdvSearchOn = $state(false);
+	let isExactSearch = $state(false);
+	let isOpenUploadModal = $state(false);
+	let showDocList = $state(false);
 
     /** @type {any} */
-    let docUploadrCmp;
+    let docUploadrCmp = $state(null);
 
 	/** @type {{
 	 * startId: string | null,
@@ -135,17 +138,18 @@
 		sort: null
 	};
 
-    $: disabled = isLoading || isLoadingMore || isSearching;
-	$: {
-		disableSearchBtn = false;
-		if (isSearching || isLoadingMore) {
-			disableSearchBtn = true;
+	let disableBase = $derived(isLoading || isLoadingMore || isSearching);
+    let disabled = $derived(!selectedCollection || disableBase);
+	let disableSearchBtn = $derived.by(() => {
+		if (!selectedCollection || isSearching || isLoadingMore) {
+			return true;
 		} else if (textSearch && searchItems.length > 0) {
-			disableSearchBtn = false;
+			return false;
 		} else if (!text || util.trim(text).length === 0) {
-			disableSearchBtn = true;
+			return true;
 		}
-	}
+		return false;
+	});
 
 
 	onMount(() => {
@@ -155,15 +159,18 @@
 	function initData() {
 		isLoading = true;
     	getCollections().then(() => {
-			Promise.all([
-				getData({
-					...defaultParams,
-					isReset: true,
-					skipLoader: true,
-					filterGroups: innerSearchGroups,
-					sort: null
-				})
-			]).finally(() => isLoading = false);
+			if (selectedCollection) {
+				Promise.all([
+					getDocProcessors(),
+					getData({
+						...defaultParams,
+						isReset: true,
+						skipLoader: true,
+						filterGroups: innerSearchGroups,
+						sort: null
+					})
+				]).finally(() => isLoading = false);
+			}
 		}).finally(() => {
 			isLoading = false;
 		});
@@ -184,6 +191,8 @@
 		isSearching = true;
 		searchDone = false;
 		isFromSearch = false;
+		elapsedTime = '';
+		const start = new Date();
 
 		innerSearchGroups = buildSearchFilterGroups(searchItems);
 		innerSort = buildSearchSort(sortField, sortOrder);
@@ -200,16 +209,21 @@
 			}).finally(() => {
 				isSearching = false;
 				searchDone = true;
+				const gap = new Date().getTime() - start.getTime();
+            	elapsedTime = `${(gap / 1000).toFixed(3)}s`;
 			});
 		} else {
+			/** @type {import('$knowledgeTypes').KnowledgeQueryRequest} */
 			const params = {
 				text: util.trim(text),
+				limit: searchLimit,
 				confidence: Number(validateConfidenceNumber(confidence)),
-				with_vector: enableVector,
-				filter_groups: innerSearchGroups
+				withVector: enableVector,
+				filterGroups: innerSearchGroups,
+				searchParam: { exact_search: isExactSearch }
 			};
 
-			searchVectorKnowledge(selectedCollection, params).then(res => {
+			executeKnowledgeQuery(selectedCollection, params, knowledgeType).then(res => {
 				items = res || [];
 				totalDataCount = items.length;
 				isFromSearch = true;
@@ -217,13 +231,15 @@
 				isSearching = false;
 				searchDone = true;
 				nextId = null;
+				const gap = new Date().getTime() - start.getTime();
+            	elapsedTime = `${(gap / 1000).toFixed(3)}s`;
 			});
 		}
 	}
 
 	/** @param {KeyboardEvent} e */
 	function pressKey(e) {
-		if ((e.key === 'Enter' && (!!e.shiftKey || !!e.ctrlKey)) || e.key !== 'Enter' || !!!util.trim(text) || isSearching) {
+		if ((e.key === 'Enter' && (!!e.shiftKey || !!e.ctrlKey)) || e.key !== 'Enter' || !util.trim(text) || isSearching) {
 			return;
 		}
 
@@ -260,12 +276,14 @@
 	}
 
 	function resetStates() {
+		elapsedTime = '';
 		text = "";
 		nextId = null;
 		isSearching = false;
 		searchDone = false;
 		isFromSearch = false;
 		textSearch = false;
+		isExactSearch = false;
 		selectedOperator = 'or';
 		innerSearchGroups = [];
 		sortField = '';
@@ -324,7 +342,7 @@
 	// Knowledge list data
 	function getCollections() {
 		return new Promise((resolve, reject) => {
-			getVectorKnowledgeCollections(collectionType).then(res => {
+			getKnowledgeCollections(knowledgeType).then(res => {
 				const retCollections = res?.map(x => ({ label: x.name, value: x.name })) || [];
 				collections = [ ...retCollections ];
 				selectedCollection = collections[0]?.value;
@@ -357,12 +375,13 @@
 				with_vector: enableVector,
 				fields: [],
 				filter_groups: params.filterGroups,
-				order_by: !!params.sort?.field ? params.sort : null
+				order_by: params.sort?.field ? params.sort : null
 			};
 
-			getVectorKnowledgePageList(
+			getKnowledgePageList(
 				selectedCollection,
-				filter
+				filter,
+				knowledgeType
 			).then(res => {
 				const newItems = res.items || [];
 				if (params.isReset) {
@@ -401,7 +420,7 @@
 			if (!params.skipLoader) {
                 toggleLoader(params.isLocalLoading);
             }
-			
+
 			getKnowledgeListData({
 				...params
 			}).then(res => {
@@ -416,6 +435,19 @@
 				if (!params.skipLoader) {
                     toggleLoader(params.isLocalLoading);
                 }
+			});
+		});
+	}
+
+	function getDocProcessors() {
+		return new Promise((resolve, reject) => {
+			getKnowledgeProcessors().then(res => {
+				const retProcessors = res?.map(x => ({  label: x, value: x })) || [];
+				docProcessors = [ ...retProcessors ];
+				resolve(res);
+			}).catch(err => {
+				docProcessors = [];
+				reject(err);
 			});
 		});
 	}
@@ -442,9 +474,9 @@
 
 	/** @param {any} e */
 	function onKnowledgeDelete(e) {
-		const id = e.detail.id;
+		const id = e.id;
 		isLoading = true;
-		deleteVectorKnowledgeData(selectedCollection, id).then(res => {
+		deleteKnowledgeData(id, selectedCollection, knowledgeType).then(res => {
 			if (res) {
 				isComplete = true;
 				successText = "Knowledge has been deleted!";
@@ -472,8 +504,8 @@
 	/** @param {any} e */
 	function onKnowledgeUpdate(e) {
 		editModalTitle = "Edit knowledge";
-		editCollection = e.detail.collection;
-		editItem = e.detail.item;
+		editCollection = e.collection;
+		editItem = e.item;
 		isOpenEditKnowledge = true;
 	}
 
@@ -484,40 +516,58 @@
 		isOpenEditKnowledge = true;
 	}
 
+	/** @typedef {{ kind: 'delete-all' } | { kind: 'delete-collection' }} PendingAction */
+
+	let confirmOpen = $state(false);
+	/** @type {PendingAction | null} */
+	let pendingAction = $state(null);
+
 	function onKnowledgeDeleteAll() {
-		Swal.fire({
-            title: 'Are you sure?',
-            text: `Are you sure you want to delete all data in collection "${selectedCollection}"?`,
-            icon: 'warning',
-			customClass: { confirmButton: 'danger-background' },
-            showCancelButton: true,
-            cancelButtonText: 'No',
-            confirmButtonText: 'Yes',
-        }).then(async (result) => {
-            if (result.value) {
-				isLoading = true;
-                deleteAllVectorKnowledgeData(selectedCollection).then(res => {
-					if (res) {
-						successText = "All data has been deleted!";
-						isComplete = true;
-						setTimeout(() => {
-							isComplete = false;
-						}, duration);
-						reset(true);
-					} else {
-						throw 'Error when deleting all data';
-					}
-				}).catch(() => {
-					errorText = "Failed to delete all data."
-					isError = true;
-					setTimeout(() => {
-						isError = false;
-					}, duration);
-				}).finally(() => {
-					isLoading = false;
-				});
-            }
-        });
+		pendingAction = { kind: 'delete-all' };
+		confirmOpen = true;
+	}
+
+	function closeConfirm() {
+		confirmOpen = false;
+		pendingAction = null;
+	}
+
+	function onConfirm() {
+		if (!pendingAction) {
+			closeConfirm();
+			return;
+		}
+		const action = pendingAction;
+		closeConfirm();
+		if (action.kind === 'delete-all') {
+			handleDeleteAllKnowledge();
+		} else {
+			handleDeleteCollection();
+		}
+	}
+
+	function handleDeleteAllKnowledge() {
+		isLoading = true;
+		deleteAllKnowledgeData(selectedCollection, knowledgeType).then(res => {
+			if (res) {
+				successText = "All data has been deleted!";
+				isComplete = true;
+				setTimeout(() => {
+					isComplete = false;
+				}, duration);
+				reset(true);
+			} else {
+				throw 'Error when deleting all data';
+			}
+		}).catch(() => {
+			errorText = "Failed to delete all data."
+			isError = true;
+			setTimeout(() => {
+				isError = false;
+			}, duration);
+		}).finally(() => {
+			isLoading = false;
+		});
 	}
 
 	function toggleKnowledgeEditModal() {
@@ -539,12 +589,13 @@
 			}
 		};
 
-		if (!!editItem) {
-			updateVectorKnowledgeData(
+		if (editItem) {
+			updateKnowledgeData(
 				e.id,
 				editCollection,
 				e.data?.text,
-				e.payload
+				e.payload,
+				knowledgeType
 			).then(res => {
 				if (res) {
 					isComplete = true;
@@ -568,10 +619,11 @@
 				isLoading = false;
 			});
 		} else {
-			createVectorKnowledgeData(
+			createKnowledgeData(
 				editCollection,
 				e.data?.text,
-				e.payload
+				e.payload,
+				knowledgeType
 			).then(res => {
 				if (res) {
 					isComplete = true;
@@ -628,7 +680,7 @@
 	function changeCollection(e) {
 		const selectedValues = e?.detail?.selecteds || [];
 		selectedCollection = selectedValues[0]?.value;
-        docUploadrCmp?.onCollectionChanged();
+        docUploadrCmp?.handleCollectionChanged();
 		reset();
 	}
 
@@ -640,13 +692,12 @@
 	function confirmCollectionCreate(data) {
 		isLoading = true;
 		toggleCollectionCreate();
-		createVectorCollection({
-			collection_name: data.collection_name,
-			collection_type: collectionType,
+		createKnowledgeCollection({
+			collectionName: data.collectionName,
 			dimension: data.dimension,
 			provider: data.provider,
 			model: data.model
-		}).then(res => {
+		}, knowledgeType).then(res => {
 			if (res) {
 				successText = "Collection has been created!";
 				isComplete = true;
@@ -669,51 +720,45 @@
 	}
 
 	function deleteCollection() {
-        Swal.fire({
-            title: 'Are you sure?',
-            text: `Are you sure you want to delete collection "${selectedCollection}"?`,
-            icon: 'warning',
-			customClass: { confirmButton: 'danger-background' },
-            showCancelButton: true,
-            cancelButtonText: 'No',
-            confirmButtonText: 'Yes',
-        }).then(async (result) => {
-            if (result.value) {
-				isLoading = true;
-                deleteVectorCollection(selectedCollection).then(res => {
-					if (res) {
-						successText = "Collection has been deleted!";
-						isComplete = true;
-						setTimeout(() => {
-							isComplete = false;
-						}, duration);
-						initPage();
-					} else {
-						throw 'Error when deleting vector collection';
-					}
-				}).catch(() => {
-					errorText = "Failed to delete collection."
-					isError = true;
-					setTimeout(() => {
-						isError = false;
-					}, duration);
-				}).finally(() => {
-					isLoading = false;
-				});
-            }
-        });
+		pendingAction = { kind: 'delete-collection' };
+		confirmOpen = true;
 	}
 
-    /** @param {any} e */
-    function onDocUploaded(e) {
-        reset();
+	function handleDeleteCollection() {
+		isLoading = true;
+		deleteKnowledgeCollection(selectedCollection, knowledgeType).then(res => {
+			if (res) {
+				successText = "Collection has been deleted!";
+				isComplete = true;
+				setTimeout(() => {
+					isComplete = false;
+				}, duration);
+				initPage();
+			} else {
+				throw 'Error when deleting vector collection';
+			}
+		}).catch(() => {
+			errorText = "Failed to delete collection."
+			isError = true;
+			setTimeout(() => {
+				isError = false;
+			}, duration);
+		}).finally(() => {
+			isLoading = false;
+		});
+	}
+
+    /**
+	 * @param {boolean} skipLoader
+	 */
+    function onDocUploaded(skipLoader = false) {
+        reset(skipLoader);
     }
 
-    /** @param {any} e */
-    function onDocDeleted(e) {
+    /** @param {{ success: boolean }} detail */
+    function onDocDeleted(detail) {
         reset();
-        const success = e.detail.success;
-        if (success) {
+        if (detail.success) {
             successText = "Knowledge document has been deleted!";
             isComplete = true;
             setTimeout(() => {
@@ -728,11 +773,10 @@
         }
     }
 
-	/** @param {any} e */
-    function onDocsReset(e) {
+	/** @param {{ success: boolean }} detail */
+    function onDocsReset(detail) {
         reset();
-        const success = e.detail.success;
-        if (success) {
+        if (detail.success) {
             successText = "Knowledge document has been reset!";
             isComplete = true;
             setTimeout(() => {
@@ -767,7 +811,7 @@
 		if (isAdvSearchOn && items?.length > 0) {
 			const validItems = items.filter(x => x.checked && !!util.trim(x.key) && !!util.trim(x.value))
 									.map(x => ({ key: util.trim(x.key), value: util.trim(x.value), data_type: x.data_type || VectorPayloadDataType.String.name }));
-			
+
 			if (validItems.length > 0) {
 				groups = [ ...groups, { logical_operator: 'or', filters: [
 					{
@@ -799,10 +843,10 @@
 		const { addIndexes, deleteIndexes } = e;
 		try {
 			if (addIndexes?.length > 0) {
-				await createVectorIndexes(selectedCollection, addIndexes);
+				await createKnowledgeIndexes(selectedCollection, addIndexes, knowledgeType);
 			}
 			if (deleteIndexes?.length > 0) {
-				await deleteVectorIndexes(selectedCollection, deleteIndexes);
+				await deleteKnowledgeIndexes(selectedCollection, deleteIndexes, knowledgeType);
 			}
 			successText = "Indexes have been updated!";
             isComplete = true;
@@ -823,10 +867,14 @@
 	function toggleIndexModal() {
 		isOpenIndexModal = !isOpenIndexModal;
 	}
+
+	function toggleUploadModal() {
+		isOpenUploadModal = !isOpenUploadModal;
+	}
 </script>
 
-<HeadTitle title="{$_('Document Knowledge')}" />
-<Breadcrumb pagetitle="{$_('Document Knowledge')}" title="{$_('Knowledge Base')}"/>
+<HeadTitle title={$_('Document Knowledge')} addOn="Knowledge Base" />
+<Breadcrumb pagetitle={$_('Document Knowledge')} title={$_('Knowledge Base')}/>
 
 <LoadingToComplete
 	isLoading={isLoading}
@@ -836,13 +884,28 @@
 	errorText={errorText}
 />
 
+<ConfirmModal
+	isOpen={confirmOpen}
+	icon="warning"
+	title="Are you sure?"
+	text={pendingAction?.kind === 'delete-collection'
+		? `Are you sure you want to delete collection "${selectedCollection}"?`
+		: `Are you sure you want to delete all data in collection "${selectedCollection}"?`}
+	confirmBtnText="Yes"
+	cancelBtnText="No"
+	confirmBtnColor="danger"
+	confirm={onConfirm}
+	cancel={closeConfirm}
+	toggleModal={closeConfirm}
+/>
+
 {#if isOpenEditKnowledge}
 	<VectorItemEditModal
 		className={'vector-edit-container'}
 		title={editModalTitle}
 		size={'lg'}
 		collection={editCollection}
-        collectionType={collectionType}
+        knowledgeType={knowledgeType}
 		item={editItem}
 		open={isOpenEditKnowledge}
 		allowPayload
@@ -851,7 +914,7 @@
 			KnowledgePayloadName.Text
 		]}
 		toggleModal={() => isOpenEditKnowledge = !isOpenEditKnowledge}
-		confirm={(e) => confirmEdit(e)}
+		confirm={(/** @type {any} */ e) => confirmEdit(e)}
 		cancel={() => toggleKnowledgeEditModal()}
 	/>
 {/if}
@@ -862,330 +925,401 @@
 		title={''}
 		size={'xl'}
 		collection={selectedCollection}
+		knowledgeType={knowledgeType}
 		open={isOpenIndexModal}
 		toggleModal={() => isOpenIndexModal = !isOpenIndexModal}
-		confirm={(e) => confirmIndex(e)}
+		confirm={(/** @type {any} */ e) => confirmIndex(e)}
 		cancel={() => toggleIndexModal()}
 	/>
 {/if}
 
+<KnowledgeUploadModal
+	className={'knowledge-upload-modal-container'}
+	size={'md'}
+	accept={'.txt,.pdf'}
+	collection={selectedCollection}
+	open={isOpenUploadModal}
+	processors={docProcessors}
+	toggleModal={() => toggleUploadModal()}
+	ondocuploaded={() => {
+		showDocList = false;
+		isOpenUploadModal = false;
+		onDocUploaded(true);
+	}}
+/>
+
 <CollectionCreateModal
 	title={'Create new collection'}
+	knowledgeType={knowledgeType}
 	open={isOpenCreateCollection}
 	toggleModal={() => toggleCollectionCreate()}
-	confirm={e => confirmCollectionCreate(e)}
+	confirm={(/** @type {any} */ e) => confirmCollectionCreate(e)}
 	cancel={() => toggleCollectionCreate()}
 />
 
-<div class="knowledge-demo-btn mb-4">
-	<div class="demo-btn">
-		<Button
-			color={`${showDemo ? 'danger' : 'primary'}`}
-			on:click={() => toggleDemo()}
+<div class="doc-action-bar">
+	<div class="doc-demo-btn-group">
+		<button
+			type="button"
+			class={`doc-btn ${showDemo ? 'doc-btn-danger' : 'doc-btn-primary'}`}
+			onclick={() => toggleDemo()}
 		>
 			{#if !showDemo}
-				<div class="btn-content">
-					<div class="knowledge-btn-icon"><i class="bx bx-search-alt" /></div>
-					<div>{'Start Search'}</div>
-				</div>
+				<i class="bx bx-search-alt"></i>
+				<span>{'Start Search'}</span>
 			{:else}
-				<div class="btn-content">
-					<div class="knowledge-btn-icon"><i class="bx bx-hide" /></div>
-					<div>{'Hide Search'}</div>
-				</div>
+				<i class="bx bx-hide"></i>
+				<span>{'Hide Search'}</span>
 			{/if}
-		</Button>
+		</button>
 
 		{#if showDemo}
-			<div class="knowledge-btn-icon demo-tooltip-icon line-align-center" id="demo-tooltip">
-				<i class="bx bx-info-circle" />
+			<div class="doc-tooltip-icon" id="demo-tooltip">
+				<i class="bx bx-info-circle"></i>
 			</div>
-			<Tooltip target="demo-tooltip" placement="top" class="demo-tooltip-note">
-				<ul>
-					<li>Click "Search" or press "Enter" to search knowledge</li>
-					<li>Switch collection will not search</li>
+			<BotsharpTooltip target="demo-tooltip" placement="top" containerClasses="[&_.tooltip-inner]:max-w-fit">
+				<ul class="mb-0 list-disc pl-4 text-left">
+					<li class="my-[3px]">Click "Search" or press "Enter" to search knowledge</li>
+					<li class="my-[3px]">Switch collection will not search</li>
 				</ul>
-			</Tooltip>
+			</BotsharpTooltip>
 		{/if}
 	</div>
-	
-	<div class="reset-btn">
-		<Button
-			on:click={() => reset()}
+
+	<div>
+		<button
+			type="button"
+			class="doc-btn doc-btn-secondary"
+			onclick={() => reset()}
 		>
-			<div class="btn-content">
-				<div class="knowledge-btn-icon"><i class="bx bx-reset" /></div>
-				<div>{'Reset'}</div>
-			</div>
-		</Button>
+			<i class="bx bx-reset"></i>
+			<span>{'Reset'}</span>
+		</button>
 	</div>
 </div>
 
-<div class="d-xl-flex">
-	<div class="w-100">
+<div class="doc-page">
+	<div class="doc-page-col">
 		{#if showDemo}
 			<div
 				in:fly={{ y: -10, duration: 500 }}
 				out:fly={{ y: -10, duration: 200 }}
 			>
-				<div class="knowledge-search-container mb-4">
+				<div class="doc-search-card">
 					<textarea
-						class='form-control knowledge-textarea'
+						class="doc-textarea"
 						rows={5}
 						maxlength={maxLength}
 						disabled={isSearching}
 						placeholder={'Start searching here...'}
 						bind:value={text}
-						on:keydown={(e) => pressKey(e)}
-					/>
-					<div class="text-secondary text-end text-count">
-						{text?.length || 0}/{maxLength}
+						onkeydown={(e) => pressKey(e)}
+					></textarea>
+					<div class="doc-meta-row">
+						<div>
+							{#if elapsedTime}
+								{`Elapsed time: ${elapsedTime}`}
+							{/if}
+						</div>
+						<div>{formatNumber(text?.length || 0)}/{formatNumber(maxLength)}</div>
 					</div>
-				
-                    <div class="mt-3 knowledge-search-footer">
-                        <div class="search-input">
-                            <div class="line-align-center input-text fw-bold">
+
+                    <div class="doc-search-footer">
+                        <div class="doc-search-input">
+                            <div class="doc-search-label">
                                 <span>{'Confidence'}</span>
                             </div>
-							<div style="display: flex; gap: 5px;">
-								<div class="line-align-center confidence-box">
-									<Input
+							<div class="doc-confidence-wrap">
+								<div class="doc-confidence-box">
+									<input
 										type="text"
-										class="text-center"
+										class="doc-confidence-input"
 										disabled={textSearch}
 										bind:value={confidence}
-										on:keydown={(e) => validateConfidenceInput(e)}
-										on:blur={(e) => changeConfidence(e)}
+										onkeydown={(e) => validateConfidenceInput(e)}
+										onblur={(e) => changeConfidence(e)}
 									/>
 								</div>
-								<div class="step-btn-group">
-									<Button
-										class="btn btn-sm"
-										color="link"
-										on:click={() => stepChangeConfidence('plus', step)}
+								<div class="doc-step-btn-group">
+									<button
+										type="button"
+										class="doc-step-btn"
+										aria-label="Increase confidence"
+										onclick={() => stepChangeConfidence('plus', step)}
 									>
-										<i class="mdi mdi-chevron-up" />
-									</Button>
-									<Button
-										class="btn btn-sm"
-										color="link"
-										on:click={() => stepChangeConfidence('minus', step)}
+										<i class="mdi mdi-chevron-up"></i>
+									</button>
+									<button
+										type="button"
+										class="doc-step-btn"
+										aria-label="Decrease confidence"
+										onclick={() => stepChangeConfidence('minus', step)}
 									>
-										<i class="mdi mdi-chevron-down" />
-									</Button>
+										<i class="mdi mdi-chevron-down"></i>
+									</button>
 								</div>
 							</div>
                         </div>
-						<div class="search-input">
-							<div class="line-align-center input-text fw-bold">
+						<div class="doc-search-input">
+							<div class="doc-search-label">
 								<span>{'Similarity search'}</span>
 							</div>
-							<div class="line-align-center input-text search-toggle">
-								<Input
-									type="switch"
-									checked={textSearch}
-									disabled={disabled}
-									on:change={e => toggleTextSearch()}
-								/>
+							<div class="doc-search-toggle">
+								<label class="doc-switch">
+									<input
+										type="checkbox"
+										role="switch"
+										checked={textSearch}
+										disabled={disabled}
+										onchange={() => toggleTextSearch()}
+									/>
+									<span class="doc-switch-slider"></span>
+								</label>
 							</div>
-							<div class="line-align-center input-text fw-bold">
+							<div class="doc-search-label">
 								<span>{'Keyword search'}</span>
 							</div>
 						</div>
-                        <div class="line-align-center">
-							<Button
-								color="primary"
+						{#if !textSearch}
+						<div class="doc-exact-search">
+							<input
+								type="checkbox"
+								class="doc-checkbox"
+								id="exact-search-check"
+								disabled={disabled}
+								bind:checked={isExactSearch}
+							/>
+							<label class="doc-search-label" for="exact-search-check">
+								Exact search
+							</label>
+						</div>
+						{/if}
+                        <div class="doc-search-input">
+							<button
+								type="button"
+								class="doc-btn doc-btn-primary"
 								disabled={disableSearchBtn}
-								on:click={() => search()}
+								onclick={() => search()}
 							>
-								{'Search'}
-							</Button>
+								<span>{'Search'}</span>
+							</button>
                         </div>
                     </div>
 
-					<AdvancedSearch
+					<!-- <AdvancedSearch
 						bind:showAdvSearch={isAdvSearchOn}
 						bind:items={searchItems}
 						bind:operator={selectedOperator}
 						bind:sortField={sortField}
 						bind:sortOrder={sortOrder}
 						disabled={disabled}
-					/>
-				
+					/> -->
+
 					{#if isSearching}
-						<div class="knowledge-loader mt-5">
-							<LoadingDots duration={'1s'} size={12} gap={5} color={'var(--bs-primary)'} />
+						<div class="doc-loader">
+							<LoadingDots duration={'1s'} size={12} gap={5} color={'var(--color-primary)'} />
 						</div>
 					{:else if searchDone && (!items || items.length === 0)}
-						<div class="mt-5 text-center">
-							<h4 class="text-secondary">{"Ehhh, no idea..."}</h4>
+						<div class="doc-empty">
+							<h4>{"Ehhh, no idea..."}</h4>
 						</div>
 					{/if}
 			  	</div>
 			</div>
 		{/if}
-        
+
         {#if selectedCollection}
-            <KnowledgeDocumentUpload
+            <KnowledgeFileUpload
                 collection={selectedCollection}
+				accept={'.txt'}
+				disableFileUpload={true}
+				disableFileDelete={false}
                 disabled={disabled}
                 bind:this={docUploadrCmp}
-                on:docuploaded={(e) => onDocUploaded(e)}
-                on:docdeleted={(e) => onDocDeleted(e)}
-				on:resetdocs={(e) => onDocsReset(e)}
+				bind:showDocList={showDocList}
+                ondocuploaded={() => onDocUploaded(true)}
+                ondocdeleted={(detail) => onDocDeleted(detail)}
+				onresetdocs={(detail) => onDocsReset(detail)}
             />
         {/if}
 
-		<div class="d-md-flex mt-5">
-			<div class="w-100">
-				<Card>
-					<CardBody>
-						<div class="mt-2 knowledge-table-header">
-							{#if totalDataCount != null && totalDataCount != undefined}
-								<div class="knowledge-count line-align-center text-muted font-size-11">
-									{`Total data: ${Number(totalDataCount).toLocaleString("en-US")}`}
+		<div class="doc-table-section">
+			<div class="doc-card">
+				<div class="doc-card-body">
+					<div class="doc-table-header">
+						{#if totalDataCount != null && totalDataCount != undefined}
+							<div class="doc-table-count">
+								{`Total data: ${formatNumber(totalDataCount)}`}
+							</div>
+						{/if}
+						<div class="doc-table-toolbar">
+							<div class="doc-toolbar-left">
+								<h5 class="doc-table-title">
+									<div>{$_('Knowledges')}</div>
+								</h5>
+								<div
+									class="doc-icon-wrap"
+									data-bs-toggle="tooltip"
+									data-bs-placement="top"
+									title="Add knowledge"
+								>
+									<button
+										type="button"
+										class="doc-btn-soft doc-btn-soft-primary"
+										disabled={disabled}
+										aria-label="Add knowledge"
+										onclick={() => onKnowledgeCreate()}
+									>
+										<i class="mdi mdi-plus"></i>
+									</button>
 								</div>
-							{/if}
-							<div class="d-flex flex-wrap mb-3 justify-content-between">
-								<div class="action-container-padding d-flex" style="gap: 5px;">
-									<h5 class="knowledge-header-text font-size-16">
-										<div>{$_('Knowledges')}</div>
-									</h5>
-									<div
-										class="line-align-center"
-										data-bs-toggle="tooltip"
-										data-bs-placement="top"
-										title="Add knowledge"
+								<div
+									class="doc-icon-wrap"
+									data-bs-toggle="tooltip"
+									data-bs-placement="top"
+									title="Delete all data"
+								>
+									<button
+										type="button"
+										class="doc-btn-soft doc-btn-soft-danger"
+										disabled={disabled}
+										aria-label="Delete all data"
+										onclick={() => onKnowledgeDeleteAll()}
 									>
-										<Button
-											class="btn btn-sm btn-soft-primary knowledge-btn-icon"
-											disabled={disabled}
-											on:click={() => onKnowledgeCreate()}
-										>
-											<i class="mdi mdi-plus" />
-										</Button>
-									</div>
-									<div
-										class="line-align-center"
-										data-bs-toggle="tooltip"
-										data-bs-placement="top"
-										title="Delete all data"
-									>
-										<Button
-											class="btn btn-sm btn-soft-danger knowledge-btn-icon"
-											disabled={disabled}
-											on:click={() => onKnowledgeDeleteAll()}
-										>
-											<i class="mdi mdi-minus" />
-										</Button>
-									</div>
+										<i class="mdi mdi-minus"></i>
+									</button>
 								</div>
-								<div class="collection-action-container action-container-padding">
-									{#if selectedCollection}
-									<div
-										class="line-align-center"
-										data-bs-toggle="tooltip"
-										data-bs-placement="top"
-										title="Create/delete payload indexes"
+								<div
+									class="doc-icon-wrap"
+									data-bs-toggle="tooltip"
+									data-bs-placement="top"
+									title="Upload doc"
+								>
+									<button
+										type="button"
+										class="doc-btn-soft doc-btn-soft-info"
+										disabled={disabled}
+										aria-label="Upload doc"
+										onclick={() => toggleUploadModal()}
 									>
-										<Button
-											class="btn btn-sm btn-soft-primary"
-											on:click={() => toggleIndexModal()}
-										>
-											Index
-										</Button>
-									</div>
-									{/if}
-
-									<div class="collection-dropdown-container">
-										<div class="line-align-center collection-dropdown">
-											<Select
-												tag={'kn-doc-collection-select'}
-												placeholder={'Select Collection'}
-												searchMode
-												selectedValues={selectedCollection ? [selectedCollection] : []}
-												options={collections}
-												on:select={e => changeCollection(e)}
-											/>
-										</div>
-									</div>
-									<div class="collection-add-container">
-										<div
-											class="line-align-center"
-											data-bs-toggle="tooltip"
-											data-bs-placement="top"
-											title="Add collection"
-										>
-											<Button
-												class="btn btn-sm btn-soft-primary collection-action-btn"
-												disabled={disabled}
-												on:click={() => toggleCollectionCreate()}
-											>
-												<i class="mdi mdi-plus" />
-											</Button>
-										</div>
-										<div
-											class="line-align-center"
-											data-bs-toggle="tooltip"
-											data-bs-placement="top"
-											title="Delete collection"
-										>
-											<Button
-												class="btn btn-sm btn-soft-danger collection-action-btn"
-												disabled={disabled}
-												on:click={() => deleteCollection()}
-											>
-												<i class="mdi mdi-minus" />
-											</Button>
-										</div>
-									</div>
+										<i class="mdi mdi-file-upload"></i>
+									</button>
 								</div>
 							</div>
-						  
-							<hr class="mt-2" />
-						  
-							<div class="table-responsive knowledge-table">
-								<Table class="table align-middle table-nowrap table-hover mb-0">
-									<thead>
-										<tr>
-											<th scope="col">{$_('Text')}</th>
-											<th></th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each items as item, idx (idx)}
-                                            <VectorItem
-												collection={selectedCollection}
-                                                collectionType={collectionType}
-												item={item}
-												open={isFromSearch && idx === 0}
-												on:delete={(e) => onKnowledgeDelete(e)}
-												on:update={(e) => onKnowledgeUpdate(e)}
-											/>
-										{/each}
-									</tbody>
-								</Table>
-						  
-								{#if isLoadingMore}
-									<div class="knowledge-loader mt-4">
-										<Loader size={25} disableDefaultStyles />
-									</div>
-								{:else if !!nextId}
-									<div class="mt-4 text-center">
-										<Button
-											class="btn btn-soft-primary"
-											disabled={disabled}
-											on:click={() => loadMore()}
-										>
-											{'Load more'}
-										</Button>
-									</div>
+							<div class="doc-toolbar-right">
+								{#if selectedCollection}
+								<div
+									class="doc-icon-wrap"
+									data-bs-toggle="tooltip"
+									data-bs-placement="top"
+									title="Create/delete payload indexes"
+								>
+									<button
+										type="button"
+										class="doc-btn-soft doc-btn-soft-primary"
+										onclick={() => toggleIndexModal()}
+									>
+										Index
+									</button>
+								</div>
 								{/if}
+
+								<div class="doc-collection-dropdown-wrap">
+									<div class="doc-collection-dropdown">
+										<Select
+											tag={'kn-doc-collection-select'}
+											placeholder={'Select Collection'}
+											searchMode
+											selectedValues={selectedCollection ? [selectedCollection] : []}
+											options={collections}
+											onselect={e => changeCollection(e)}
+										/>
+									</div>
+								</div>
+								<div class="doc-collection-actions">
+									<div
+										class="doc-icon-wrap"
+										data-bs-toggle="tooltip"
+										data-bs-placement="top"
+										title="Add collection"
+									>
+										<button
+											type="button"
+											class="doc-btn-soft doc-btn-soft-primary"
+											disabled={disableBase}
+											aria-label="Add collection"
+											onclick={() => toggleCollectionCreate()}
+										>
+											<i class="mdi mdi-plus"></i>
+										</button>
+									</div>
+									<div
+										class="doc-icon-wrap"
+										data-bs-toggle="tooltip"
+										data-bs-placement="top"
+										title="Delete collection"
+									>
+										<button
+											type="button"
+											class="doc-btn-soft doc-btn-soft-danger"
+											disabled={disabled}
+											aria-label="Delete collection"
+											onclick={() => deleteCollection()}
+										>
+											<i class="mdi mdi-minus"></i>
+										</button>
+									</div>
+								</div>
 							</div>
 						</div>
-					</CardBody>
-				</Card>
+
+						<hr class="doc-divider" />
+
+						<div class="doc-table-wrap">
+							<table class="doc-table">
+								<thead>
+									<tr>
+										<th scope="col">{$_('Text')}</th>
+										<th></th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each items as item, idx (idx)}
+                                        <VectorItem
+											collection={selectedCollection}
+                                            knowledgeType={knowledgeType}
+											item={item}
+											open={isFromSearch && idx === 0}
+											ondelete={(/** @type {any} */ data) => onKnowledgeDelete(data)}
+											onupdate={(/** @type {any} */ data) => onKnowledgeUpdate(data)}
+										/>
+									{/each}
+								</tbody>
+							</table>
+
+							{#if isLoadingMore}
+								<div class="doc-loader doc-loader-sm">
+									<Loader size={25} disableDefaultStyles spinnerType="doubleBounce" />
+								</div>
+							{:else if !!nextId}
+								<div class="doc-load-more-wrap">
+									<button
+										type="button"
+										class="doc-btn-soft doc-btn-soft-primary"
+										disabled={disabled}
+										onclick={() => loadMore()}
+									>
+										{'Load more'}
+									</button>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
 </div>
+
+
+

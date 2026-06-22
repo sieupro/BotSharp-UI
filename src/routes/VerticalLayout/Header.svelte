@@ -1,24 +1,37 @@
 <script>
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { Input } from '@sveltestrap/sveltestrap';
-	import LanguageDropdown from '$lib/common/LanguageDropdown.svelte';
-	import FullScreenDropdown from '$lib/common/FullScreenDropdown.svelte';
-	import NotificationDropdown from '$lib/common/NotificationDropdown.svelte';
-	import ProfileDropdown from '$lib/common/ProfileDropdown.svelte';
+	import LanguageDropdown from '$lib/common/dropdowns/LanguageDropdown.svelte';
+	import FullScreenDropdown from '$lib/common/dropdowns/FullScreenDropdown.svelte';
+	import NotificationDropdown from '$lib/common/dropdowns/NotificationDropdown.svelte';
+	import ProfileDropdown from '$lib/common/dropdowns/ProfileDropdown.svelte';
 	import { OverlayScrollbars } from 'overlayscrollbars';
 	import { PUBLIC_LOGO_URL } from '$env/static/public';
-	import { globalEventStore } from '$lib/helpers/store';
+	import { globalEventStore, getTenantName } from '$lib/helpers/store';
 	import { GlobalEvent } from '$lib/helpers/enums';
 
-	/** @type {any} */
-	export let user;
+	/**
+	 * @type {{
+	 *   user?: any,
+	 *   toggleRightBar?: () => void
+	 * }}
+	 */
+	let {
+		user = undefined
+	} = $props();
 
-	/** @type {() => void} */
-	export let toggleRightBar = () => {};
+	let searchText = $state('');
+	let tenantName = $state('');
 
-	/** @type {string} */
-	let searchText = '';
+	onMount(() => {
+		tenantName = getTenantName();
+		const handler = (/** @type {any} */ e) => {
+			tenantName = e?.detail?.tenantName || getTenantName() || '';
+		};
+		window.addEventListener('tenantChanged', handler);
+		return () => window.removeEventListener('tenantChanged', handler);
+	});
 
 	const toggleSideBar = () => {
 		if (browser) {
@@ -26,15 +39,19 @@
 			document.body.classList.toggle('vertical-collpsed');
 
 			if (document.body.classList.contains('vertical-collpsed')) {
-				const Instance = OverlayScrollbars(document.querySelector('#vertical-menu'));
-				if (Instance) {
-					Instance.destroy();
+				const menuElement = document.querySelector('#vertical-menu');
+				if (menuElement) {
+					// @ts-ignore
+					const instance = OverlayScrollbars(menuElement);
+					if (instance) {
+						instance.destroy();
+					}
 				}
 			} else {
 				const options = {
 					scrollbars: {
-						visibility: 'auto', // You can adjust the visibility ('auto', 'hidden', 'visible')
-						autoHide: 'move', // You can adjust the auto-hide behavior ('move', 'scroll', false)
+						visibility: 'auto',
+						autoHide: 'move',
 						autoHideDelay: 100,
 						dragScroll: true,
 						clickScroll: false,
@@ -43,72 +60,74 @@
 					}
 				};
 				const menuElement = document.querySelector('#vertical-menu');
-				OverlayScrollbars(menuElement, options);
+				if (menuElement) {
+					// @ts-ignore
+					OverlayScrollbars(menuElement, options);
+				}
 			}
 		}
 	};
 
-	/** @param {any} e */
+	/** @param {KeyboardEvent} e */
 	const search = (e) => {
 		if (e.key !== 'Enter') return;
 
 		globalEventStore.set({ name: GlobalEvent.Search, payload: searchText });
-	}
+	};
 </script>
 
-<header id="page-topbar">
-	<div class="navbar-header">
-		<div class="d-flex">
+<header
+	id="page-topbar"
+	class="fixed inset-x-0 top-0 z-[1002] h-[var(--header-height)] bg-white shadow-sm dark:bg-gray-800"
+>
+	<div class="mx-auto flex h-full items-center justify-between pr-2">
+		<div class="flex items-center">
 			<!-- LOGO -->
-			<div class="navbar-brand-box">
-				<a href="page/dashboard" class="logo logo-dark">
-					<span class="logo-sm">
-						<img src={PUBLIC_LOGO_URL} alt="" height="25" />
-					</span>
-					<span class="logo-lg">
-						<img src={PUBLIC_LOGO_URL} alt="" height="40" />
-					</span>
-				</a>
-
-				<a href="page/dashboard" class="logo logo-light">
-					<span class="logo-sm">
-						<img src={PUBLIC_LOGO_URL} alt="" height="25" />
-					</span>
-					<span class="logo-lg">
-						<img src={PUBLIC_LOGO_URL} alt="" height="40" />
-					</span>
+			<div class="flex h-[var(--header-height)] w-auto shrink-0 items-center justify-center px-3 transition-[width] duration-200 lg:w-[var(--sidebar-width)] lg:px-6 vertical-collpsed:lg:w-[var(--sidebar-collapsed-width)] vertical-collpsed:lg:px-2">
+				<a href="page/dashboard" aria-label="Home" class="block">
+					<img
+						src={PUBLIC_LOGO_URL}
+						alt=""
+						class="h-[38px] w-auto max-w-full vertical-collpsed:h-[22px]"
+					/>
 				</a>
 			</div>
 
 			<button
 				type="button"
-				class="btn btn-sm px-3 font-size-16 header-item waves-effect"
+				class="ml-1 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded text-base text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
 				id="vertical-menu-btn"
-				on:click={() => toggleSideBar()}
+				aria-label="Toggle sidebar"
+				onclick={() => toggleSideBar()}
 			>
-				<i class="fa fa-fw fa-bars" />
+				<i class="fa fa-fw fa-bars"></i>
 			</button>
 
 			<!-- App Search-->
-			<form class="app-search d-none d-lg-block">
-				<div class="position-relative">
-					<Input
+			<form class="ml-2 hidden lg:block">
+				<div class="relative">
+					<input
 						type="text"
-						class="form-control"
+						class="h-9 w-60 rounded border border-transparent bg-[#f3f3f9] py-1 pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary dark:bg-gray-700 dark:text-gray-100 font-sans"
 						placeholder="{$_('Search')}..."
-						maxlength={100}
+						maxlength={500}
 						bind:value={searchText}
-						on:keydown={e => search(e)}
+						onkeydown={e => search(e)}
 					/>
-					<span class="bx bx-search-alt" />
+					<span class="bx bx-search-alt absolute left-3 top-1/2 -translate-y-1/2 text-base text-gray-400"></span>
 				</div>
 			</form>
 		</div>
-		<div class="d-flex">
+		<div class="flex items-center">
+			{#if tenantName}
+				<span class="mx-2 hidden self-center text-sm text-muted sm:inline">Tenant: {tenantName}</span>
+			{/if}
 			<LanguageDropdown />
 			<FullScreenDropdown />
 			<NotificationDropdown />
-			<ProfileDropdown user={user}/>
+			<ProfileDropdown {user} />
 		</div>
 	</div>
 </header>
+
+

@@ -1,15 +1,22 @@
 <script>
-	import { Button, Input } from '@sveltestrap/sveltestrap';
+	import { scrollToBottom } from '$lib/helpers/utils/common';
 
-    const maxLength = 3000;
-    const limit = 8;
+    const maxLength = 4096;
+    const limit = 10;
 
-    /** @type {{key: string, value: string | null}[]} */
-    export let states = [];
+    /**
+     * @type {{
+     *   states?: import('$commonTypes').KeyValuePair[],
+     *   disabled?: boolean
+     * }}
+     */
+    let {
+        states = $bindable([]),
+        disabled = false
+    } = $props();
 
-    /** @type {boolean} */
-    export let disabled = false;
-
+    /** @type {HTMLElement} */
+    let scrollContainer;
 
     /** @param {number} idx */
     function removeState(idx) {
@@ -23,65 +30,62 @@
             ...states,
             { key: '', value: ''}
         ];
+        scrollToBottom(scrollContainer);
     }
 </script>
 
 
-<div class="instruct-setting-section instruct-setting-padding">
-    <div class="instruct-state-container">
+<div class="flex flex-col py-3">
+    <div class="grid grid-cols-[1fr_1fr_auto] gap-2 px-1 pb-1">
+        <div class="text-xs font-semibold uppercase tracking-wider text-primary">{'Name'}</div>
+        <div class="text-xs font-semibold uppercase tracking-wider text-primary">{'Value'}</div>
+        <div class="w-5"></div>
+    </div>
+    <div class="thin-scrollbar flex max-h-[200px] flex-col gap-2 overflow-y-auto px-1 pb-2" bind:this={scrollContainer}>
         {#each states as state, idx}
-            <div class="instruct-state-item">
-                <div>
-                    {#if idx === 0}
-                    <div class="text-primary mb-1">
-                        {'Key'}
-                    </div>
-                    {/if}
-                    <Input
-                        type="text"
-                        bind:value={state.key}
-                        maxlength={maxLength}
-                        disabled={disabled}
-                        placeholder="Enter a state"
-                    />
-                </div>
-                <div>
-                    {#if idx === 0}
-                    <div class="text-primary mb-1">
-                        {'Value'}
-                    </div>
-                    {/if}
-                    <Input
-                        type="text"
-                        bind:value={state.value}
-                        maxlength={maxLength}
-                        disabled={disabled}
-                        placeholder="Enter a value"
-                    />
-                </div>
-                <div class="line-align-center" style={`flex: 0 0 13px; margin-top: ${idx === 0 ? '23px' : '0px'}`}>
-                    <div>
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                        <i
-                            class="bx bx-no-entry text-danger clickable"
-                            on:click={() => removeState(idx)}
-                        />
-                    </div>
-                </div>
+            <div class="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+                <input
+                    type="text"
+                    class="form-control"
+                    name={`state-key-${idx}`}
+                    bind:value={state.key}
+                    maxlength={maxLength}
+                    disabled={disabled}
+                    placeholder="Enter a name"
+                />
+                <input
+                    type="text"
+                    class="form-control"
+                    name={`state-value-${idx}`}
+                    bind:value={state.value}
+                    maxlength={maxLength}
+                    disabled={disabled}
+                    placeholder="Enter a value"
+                />
+                <button
+                    type="button"
+                    class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md bg-danger/15 text-danger transition-all hover:scale-105 hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={disabled}
+                    aria-label="Remove state"
+                    title="Remove"
+                    onclick={() => removeState(idx)}
+                >
+                    <i class="bx bxs-no-entry text-base leading-none"></i>
+                </button>
             </div>
         {/each}
-        {#if states.length < limit}
-        <div class="text-center">
-            <Button 
-                color="link"
-                style="padding-left: 0px;"
-                disabled={disabled}
-                on:click={() => addState()}
-            >
-                Add +
-            </Button>
-        </div>
-        {/if}
     </div>
-</div>`
+    {#if states.length < limit}
+        <div class="mt-2 text-center">
+            <button
+                type="button"
+                class="btn btn-link inline-flex items-center gap-1"
+                disabled={disabled}
+                onclick={() => addState()}
+            >
+                <i class="mdi mdi-plus text-base leading-none"></i>
+                Add
+            </button>
+        </div>
+    {/if}
+</div>

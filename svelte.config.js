@@ -1,10 +1,10 @@
 // import adapter from '@sveltejs/adapter-auto';
 import adapter from '@sveltejs/adapter-static';
-// import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-	// preprocess: vitePreprocess(),
+	preprocess: vitePreprocess(),
 	kit: {
 		alias: {
 			$commonTypes: './src/lib/helpers/types/commonTypes.js',
@@ -50,10 +50,11 @@ const config = {
 				"/page/agent",
 				"/page/agent/router",
 				"/page/agent/evaluator",
-				"/page/agent/reporting/[reportType]",
+				"/page/agent/code-scripts",
 				"/page/agent/[agentId]",
 				"/page/agent/[agentId]/build",
 				"/page/agent/[agentId]/train",
+				"/page/agent/[embed]/[embedType]",
 				"/page/instruction/testing",
 				"/page/instruction/log",
 				"/page/conversation",
@@ -72,7 +73,9 @@ const config = {
 				"/chat/[agentId]/[conversationId]",
 				"/page/knowledge-base/question-answer",
 				"/page/knowledge-base/relationships",
-				"/page/knowledge-base/documents"
+				"/page/knowledge-base/documents",
+				"/page/knowledge-base/dictionary",
+				"/page/knowledge-base/[embed]/[embedType]"
 			]
 		}
 	},

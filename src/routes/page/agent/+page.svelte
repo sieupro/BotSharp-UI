@@ -2,35 +2,38 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { goto } from '$app/navigation';
-	import Swal from 'sweetalert2';
-	import { page } from '$app/stores';
-	import { Button, Col, Row } from '@sveltestrap/sveltestrap';
-	import Breadcrumb from '$lib/common/Breadcrumb.svelte';
-	import HeadTitle from '$lib/common/HeadTitle.svelte';
-	import LoadingToComplete from '$lib/common/LoadingToComplete.svelte';
-	import PlainPagination from '$lib/common/PlainPagination.svelte';
-	import Select from '$lib/common/Select.svelte';
-  	import { createAgent, getAgentLabels, getAgents } from '$lib/services/agent-service.js';
+	import ConfirmModal from '$lib/common/modals/ConfirmModal.svelte';
+	import { page } from '$app/state';
+	import Breadcrumb from '$lib/common/shared/Breadcrumb.svelte';
+	import HeadTitle from '$lib/common/shared/HeadTitle.svelte';
+	import LoadingToComplete from '$lib/common/spinners/LoadingToComplete.svelte';
+	import PlainPagination from '$lib/common/shared/PlainPagination.svelte';
+	import Select from '$lib/common/dropdowns/Select.svelte';
+  	import { createAgent, getAgentLabels, getAgents, saveAgent } from '$lib/services/agent-service.js';
 	import { AgentType, GlobalEvent, UserPermission } from '$lib/helpers/enums';
   	import { myInfo } from '$lib/services/auth-service';
 	import { ADMIN_ROLES } from '$lib/helpers/constants';
 	import { globalEventStore } from '$lib/helpers/store';
-	import CardAgent from './card-agent.svelte';
 	import {
 		getPagingQueryParams,
 		setUrlQueryParams,
 		goToUrl
 	} from '$lib/helpers/utils/common';
-	
-	
+	import CardAgent from './card-agent.svelte';
+
+
   	const firstPage = 1;
 	const pageSize = 12;
 
 	/** @type {boolean} */
-    let isLoading = false;
+    let isLoading = $state(false);
+	let isPageMounted = $state(false);
+
+	/** @type {AbortController | null | undefined} */
+	let abortController;
 
 	/** @type {import('$commonTypes').PagedItems<import('$agentTypes').AgentModel>} */
-  	let agents = { items: [], count: 0 };
+  	let agents = $state({ items: [], count: 0 });
 
 	/** @type {import('$agentTypes').AgentFilter} */
 	const initFilter = {
@@ -38,35 +41,41 @@
 	};
 
 	/** @type {import('$agentTypes').AgentFilter} */
-	let filter = { ...initFilter };
+	let filter = $state({ ...initFilter });
 
+	// svelte-ignore state_referenced_locally
 	/** @type {import('$commonTypes').Pagination} */
-	let pager = filter.pager;
+	let pager = $state(filter.pager);
 
-	/** @type {import('$userTypes').UserModel} */
-	let user;
+	/** @type {import('$userTypes').UserModel | undefined} */
+	let user = $state();
 
 	/** @type {any} */
 	let unsubscriber;
 
 	/** @type {import('$commonTypes').LabelValuePair[]} */
-	const agentTypeOptions = Object.entries(AgentType).map(([k, v]) => (
+	const agentTypeOptions = Object.entries(AgentType).map(([_, v]) => (
 		{ label: v, value: v }
 	)).sort((a, b) => a.label.localeCompare(b.label));
 
 	/** @type {import('$commonTypes').LabelValuePair[]} */
-	let agentLabelOptions = [];
+	let agentLabelOptions = $state([]);
 
-	/** @type {string[]} */
-	let selectedAgentTypes = [];
-	/** @type {string[]} */
-	let selectedAgentLabels = [];
+	/** @type {{ name: string, types: string[], labels: string[] }} */
+	let searchItem = $state({
+		name: '',
+		types: [],
+		labels: []
+	});
 
 	onMount(async () => {
+		isPageMounted = true;
 		const { pageNum, pageSizeNum } = getPagingQueryParams({
-			page: $page.url.searchParams.get("page"),
-			pageSize: $page.url.searchParams.get("pageSize")
+			page: page.url.searchParams.get("page"),
+			pageSize: page.url.searchParams.get("pageSize")
 		}, { defaultPageSize: pageSize });
+
+		const similarName = page.url.searchParams.get("similarName")?.trim();
 
 		filter = {
 			...filter,
@@ -74,7 +83,8 @@
 				...filter.pager,
 				page: pageNum,
 				size: pageSizeNum
-			}
+			},
+			similarName: similarName
 		};
 
 		user = await myInfo();
@@ -90,9 +100,9 @@
 					page: firstPage,
 					count: 0
 				},
-				types: selectedAgentTypes?.length > 0 ? selectedAgentTypes : null,
-				labels: selectedAgentLabels?.length > 0 ? selectedAgentLabels : null,
-				similarName: event.payload || null
+				types: searchItem.types?.length > 0 ? searchItem.types : null,
+				labels: searchItem.labels?.length > 0 ? searchItem.labels : null,
+				similarName: event.payload?.trim() || null
 			};
 
 			getPagedAgents();
@@ -100,12 +110,23 @@
 	});
 
 	onDestroy(() => {
+		isPageMounted = false;
 		unsubscriber?.();
 	});
 
   	function getPagedAgents() {
 		isLoading = true;
-    	getAgents(filter, true).then(data => {
+
+		if (abortController) {
+			abortController.abort();
+		}
+		abortController = new AbortController();
+
+		const innerFilter = {
+			...filter,
+			similarName: filter.similarName ? decodeURIComponent(filter.similarName) : null
+		};
+    	getAgents(innerFilter, true, abortController?.signal).then(data => {
 			agents = data;
 		}).catch(() => {
 			agents = { items: [], count: 0 };
@@ -116,27 +137,39 @@
 	}
 
 	function getAgentLabelOptions() {
-		return getAgentLabels().then(res => {
+		return getAgentLabels(3000).then(res => {
 			agentLabelOptions = res?.map(x => ({ label: x, value: x })) || [];
 		}).catch(() => {
 			agentLabelOptions = [];
 		});
 	}
 
+	/** @typedef {{ kind: 'create' } | { kind: 'import-error' }} PendingAction */
+
+	let confirmOpen = $state(false);
+	/** @type {PendingAction | null} */
+	let pendingAction = $state(null);
+
 	function createNewAgent() {
-		// @ts-ignore
-        Swal.fire({
-            title: 'Are you sure?',
-            text: "Are you sure you want to create a new agent?",
-            icon: 'warning',
-            showCancelButton: true,
-			cancelButtonText: 'No',
-            confirmButtonText: 'Yes'
-        }).then(async (result) => {
-            if (result.value) {
-                await handleCreateNewAgent();
-            }
-        });
+		pendingAction = { kind: 'create' };
+		confirmOpen = true;
+	}
+
+	function closeConfirm() {
+		confirmOpen = false;
+		pendingAction = null;
+	}
+
+	async function onConfirm() {
+		if (!pendingAction) {
+			closeConfirm();
+			return;
+		}
+		const action = pendingAction;
+		closeConfirm();
+		if (action.kind === 'create') {
+			await handleCreateNewAgent();
+		}
 	}
 
 	async function handleCreateNewAgent() {
@@ -149,6 +182,47 @@
 		// @ts-ignore
 		const createdAgent = await createAgent(newAgent);
 		goto(`page/agent/${createdAgent.id}`);
+	}
+
+	function importAgent() {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = '.json';
+		input.onchange = async (e) => {
+			const file = e.target.files?.[0];
+			if (!file) return;
+
+			try {
+				const text = await file.text();
+				const data = JSON.parse(text);
+
+				const newAgent = {
+					name: data.name || 'Imported Agent',
+					description: data.description || '',
+					instruction: data.instruction || '',
+					isPublic: data.is_public ?? true
+				};
+
+				// @ts-ignore
+				const createdAgent = await createAgent(newAgent);
+
+				// Merge remaining fields and save
+				const fullAgent = {
+					...data,
+					id: createdAgent.id,
+					created_datetime: createdAgent.created_datetime,
+					updated_datetime: createdAgent.updated_datetime,
+					plugin: createdAgent.plugin
+				};
+				await saveAgent(fullAgent);
+
+				goto(`page/agent/${createdAgent.id}`);
+			} catch (err) {
+				pendingAction = { kind: 'import-error' };
+				confirmOpen = true;
+			}
+		};
+		input.click();
 	}
 
 	function refresh() {
@@ -171,10 +245,19 @@
 			count: totalItemsCount || 0
 		};
 
-		setUrlQueryParams($page.url, [
+		const queryParams = [
 			{ key: 'page', value: `${pager.page}` },
 			{ key: 'pageSize', value: `${pager.size}` }
-		], () => goToUrl(`${$page.url.pathname}${$page.url.search}`));
+		];
+
+		if (filter.similarName) {
+			queryParams.push({ key: 'similarName', value: encodeURIComponent(filter.similarName) });
+		}
+
+		setUrlQueryParams(page.url, queryParams, (url) => {
+			if (!isPageMounted) return;
+			goToUrl(`${url.pathname}${url.search}`)
+		});
 	}
 
 	/**
@@ -193,17 +276,34 @@
 
 		getPagedAgents();
 	}
-	
+
+	/** @param {any} e */
+	function changeSearchName(e) {
+		searchItem.name = e.target.value || '';
+		filter = {
+			...filter,
+			similarName: searchItem.name?.trim()
+		};
+	}
+
+	/** @param {any} e */
+	function searchKeyDown(e) {
+		if (e.key === 'Enter' && filter?.similarName) {
+			e.preventDefault();
+			search();
+		}
+	}
+
 	/** @param {any} e */
 	function selectAgentTypeOption(e) {
 		// @ts-ignore
-		selectedAgentTypes = e.detail.selecteds?.map(x => x.label) || [];
+		searchItem.types = e.detail.selecteds?.map(x => x.label) || [];
 	}
 
 	/** @param {any} e */
 	function selectAgentLabelOption(e) {
 		// @ts-ignore
-		selectedAgentLabels = e.detail.selecteds?.map(x => x.label) || [];
+		searchItem.labels = e.detail.selecteds?.map(x => x.label) || [];
 	}
 
 	function search() {
@@ -213,15 +313,21 @@
 	}
 
 	function reset() {
-		selectedAgentTypes = [];
-		selectedAgentLabels = [];
+		searchItem = {
+			name: '',
+			types: [],
+			labels: []
+		};
+
+		filter = { ...initFilter };
+		getPagedAgents();
 	}
 
 	function refreshFilter() {
 		filter = {
 			...filter,
-			types: selectedAgentTypes?.length > 0 ? selectedAgentTypes : null,
-			labels: selectedAgentLabels?.length > 0 ? selectedAgentLabels : null,
+			types: searchItem.types?.length > 0 ? searchItem.types : null,
+			labels: searchItem.labels?.length > 0 ? searchItem.labels : null,
 			pager: initFilter.pager
 		};
 	}
@@ -234,28 +340,59 @@
 	}
 </script>
 
-<HeadTitle title="{$_('List')}" />
-<Breadcrumb title="{$_('Agent')}" pagetitle="{$_('List')}" />
-<LoadingToComplete isLoading={isLoading} />
+<HeadTitle title={$_('List')} />
+<Breadcrumb title={$_('Agent')} pagetitle={$_('List')} />
 
-<div class="agents-header-container mb-4">
-	<div>
+<LoadingToComplete
+	isLoading={isLoading}
+/>
+
+<ConfirmModal
+	isOpen={confirmOpen}
+	icon={pendingAction?.kind === 'import-error' ? 'error' : 'warning'}
+	title={pendingAction?.kind === 'import-error' ? 'Error' : 'Are you sure?'}
+	text={pendingAction?.kind === 'import-error'
+		? 'Failed to import agent. Please check the JSON file.'
+		: 'Are you sure you want to create a new agent?'}
+	confirmBtnText={pendingAction?.kind === 'import-error' ? 'OK' : 'Yes'}
+	cancelBtnText="No"
+	showCancelBtn={pendingAction?.kind !== 'import-error'}
+	confirmBtnColor={pendingAction?.kind === 'import-error' ? 'danger' : 'primary'}
+	confirm={onConfirm}
+	cancel={closeConfirm}
+	toggleModal={closeConfirm}
+/>
+
+<div class="ag-header">
+	<div class="ag-header-actions">
 		{#if !!user && (ADMIN_ROLES.includes(user.role || '') || !!user.permissions?.includes(UserPermission.CreateAgent))}
-		<Button color="primary" on:click={() => createNewAgent()}>
-			<i class="bx bx-copy" /> {$_('New Agent')}
-		</Button>
+		<button type="button" class="ag-btn ag-btn-primary" onclick={() => createNewAgent()}>
+			<i class="mdi mdi-content-copy"></i> {$_('New Agent')}
+		</button>
+		<button type="button" class="ag-btn ag-btn-ghost" onclick={() => importAgent()}>
+			<i class="mdi mdi-upload"></i> {$_('Import Agent')}
+		</button>
 		{/if}
 	</div>
-	<div class="agent-filter">
+	<div class="ag-filter">
+		<input
+			type="text"
+			class="ag-input"
+			placeholder="Search by name"
+			maxlength={500}
+			value={searchItem.name}
+			oninput={e => changeSearchName(e)}
+			onkeydown={e => searchKeyDown(e)}
+		/>
 		<Select
 			tag={'agent-label-select'}
 			placeholder={'Select labels'}
 			selectedText={'labels'}
 			multiSelect
 			searchMode
-			selectedValues={selectedAgentLabels}
+			selectedValues={searchItem.labels}
 			options={agentLabelOptions}
-			on:select={e => selectAgentLabelOption(e)}
+			onselect={e => selectAgentLabelOption(e)}
 		/>
 		<Select
 			tag={'agent-type-select'}
@@ -263,34 +400,41 @@
 			selectedText={'types'}
 			multiSelect
 			searchMode
-			selectedValues={selectedAgentTypes}
+			selectedValues={searchItem.types}
 			options={agentTypeOptions}
-			on:select={e => selectAgentTypeOption(e)}
+			onselect={e => selectAgentTypeOption(e)}
 		/>
-		<Button
-			class="btn btn-info"
+		<button
+			type="button"
+			class="ag-btn-icon ag-btn-icon-info"
 			data-bs-toggle="tooltip"
 			data-bs-placement="bottom"
 			title="Search"
-			on:click={(e) => search()}
+			onclick={() => search()}
 		>
-			<i class="mdi mdi-magnify" />
-		</Button>
-		<Button
-			class="btn btn-light"
+			<i class="mdi mdi-magnify"></i>
+		</button>
+		<button
+			type="button"
+			class="ag-btn-icon ag-btn-icon-warning"
 			data-bs-toggle="tooltip"
 			data-bs-placement="bottom"
-			title="Reset filters"
-			on:click={(e) => reset()}
+			title="Reset"
+			onclick={() => reset()}
 		>
-			<i class="mdi mdi-restore" />
-		</Button>
+			<i class="mdi mdi-restore"></i>
+		</button>
 	</div>
 </div>
 
-
-<Row>
+<div class="ag-grid">
 	<CardAgent agents={agents.items} />
-</Row>
+</div>
 
-<PlainPagination pagination={pager} pageTo={pn => pageTo(pn)} />
+<div class="ag-pagination">
+	<PlainPagination pagination={pager} pageTo={pn => pageTo(pn)} />
+</div>
+
+
+
+

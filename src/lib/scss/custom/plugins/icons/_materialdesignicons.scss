@@ -1,4 +1,4 @@
-/* MaterialDesignIcons.com */
+﻿/* MaterialDesignIcons.com */
 @font-face {
   font-family: "Material Design Icons";
   src: url("/fonts/materialdesignicons-webfont.eot?v=5.8.55");
@@ -3804,6 +3804,10 @@
 
 .mdi-brightness-percent::before {
   content: "\F0CF2";
+}
+
+.mdi-broadcast::before {
+  content: "\F1720";
 }
 
 .mdi-broom::before {

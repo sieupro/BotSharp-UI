@@ -2,24 +2,25 @@
 	import { getContext, onMount } from "svelte";
     import { fade } from 'svelte/transition';
     import SveltePlayer from "svelte-player";
-    import { Card, CardBody } from "@sveltestrap/sveltestrap";
     import { ElementType } from "$lib/helpers/enums";
 	import ChatFileUploader from "../chat-util/chat-file-uploader.svelte";
 
-    /** @type {boolean} */
-    export let isMultiSelect = false;
-
-    /** @type {boolean} */
-    export let disabled = false;
-    
-    /** @type {any[]} */
-    export let options = [];
-
-    /** @type {(args0: string, args1: string) => any} */
-    export let onConfirm = () => {};
-
-    /** @type {string} */
-    export let confirmBtnText = 'Continue';
+    /**
+     * @type {{
+     *   isMultiSelect?: boolean,
+     *   disabled?: boolean,
+     *   options?: any[],
+     *   onConfirm?: (args0: string, args1: string) => any,
+     *   confirmBtnText?: string
+     * }}
+     */
+    let {
+        isMultiSelect = false,
+        disabled = false,
+        options = [],
+        confirmBtnText = 'Continue',
+        onConfirm = () => {}
+    } = $props();
 
     const duration = 1000;
     const separator = '|';
@@ -29,15 +30,15 @@
     ];
 
     /** @type {string[]} */
-    let titleAnswers = [];
+    let titleAnswers = $state([]);
     /** @type {string[]} */
-    let payloadAnswers = [];
+    let payloadAnswers = $state([]);
     /** @type {any[]} */
-    let plainOptions = [];
+    let plainOptions = $state([]);
     /** @type {any[]} */
-    let videoOptions = [];
+    let videoOptions = $state([]);
     /** @type {any} */
-    let fileOption;
+    let fileOption = $state(undefined);
 
     const { autoScrollToBottom }  = getContext('chat-window-context');
 
@@ -87,7 +88,7 @@
                     op.isClicked = !op.isClicked;
                     if (op.isClicked) {
                         titleAnswers = [...titleAnswers, op.title];
-                        if (!!op.payload) {
+                        if (op.payload) {
                             payloadAnswers = [...payloadAnswers, op.payload];
                         }
                     } else {
@@ -130,56 +131,55 @@
 </script>
 
 {#if videoOptions}
-<div class="video-option-container center-option">
-    {#each videoOptions as video, index}
-        <div class="video-element-card" in:fade={{ duration: duration }}>
-            <Card>
-                <CardBody>
-                    <div class="video-element-title">
-                        {video.title}
-                    </div>
-                    <div class="video-element-player">
-                        <SveltePlayer url={video.payload} controls />
-                    </div>
-                </CardBody>
-            </Card>
+<div class="rcpo-video-row rcpo-center">
+    {#each videoOptions as video}
+        <div class="rcpo-video-card" in:fade={{ duration: duration }}>
+            <div class="rcpo-video-body">
+                <div class="rcpo-video-title">
+                    {video.title}
+                </div>
+                <div class="rcpo-video-player">
+                    <SveltePlayer url={video.payload} controls />
+                </div>
+            </div>
         </div>
     {/each}
 </div>
 {/if}
 
 {#if plainOptions || fileOption}
-<div class="plain-option-container center-option">
+<div class="rcpo-option-row rcpo-center">
     {#each plainOptions as option, index}
         <button
-            class={`btn btn-sm m-1 ${option.is_secondary ? 'btn-outline-secondary': 'btn-outline-primary'}`}
-            class:active={!!option.isClicked}
+            class={`rcpo-btn ${option.is_secondary ? 'rcpo-btn-secondary' : 'rcpo-btn-primary'}`}
+            class:rcpo-active={!!option.isClicked}
             disabled={disabled}
             in:fade={{ duration: duration }}
-            on:click={(e) => handleClickOption(e, option, index)}
+            onclick={(e) => handleClickOption(e, option, index)}
         >
-            <span class={`${option.type === ElementType.Web && option.url ? 'link-option' : ''}`}>
+            <span class={`${option.type === ElementType.Web && option.url ? 'rcpo-link' : ''}`}>
                 {option.title}
             </span>
         </button>
     {/each}
     {#if plainOptions && isMultiSelect}
         <button
-            class="btn btn-outline-success btn-sm m-1"
+            class="rcpo-btn rcpo-btn-confirm"
             name="confirm"
             in:fade={{ duration: duration }}
-            disabled={disabled || plainOptions.every(x => !!!x.isClicked)}
-            on:click={(e) => handleConfirm(e)}
+            disabled={disabled || plainOptions.every(x => !x.isClicked)}
+            onclick={(e) => handleConfirm(e)}
         >
             {confirmBtnText || 'Continue'}
         </button>
     {/if}
     {#if fileOption}
-        <ChatFileUploader accept=".png,.jpg,.jpeg" containerClasses={'line-align-center text-primary chat-uploader'}>
-            <span style="position: relative; top: 3px;" in:fade={{ duration: duration }}>
-                <i class="bx bx-image-add" />
+        <ChatFileUploader accept=".png,.jpg,.jpeg" containerClasses={'rcpo-uploader'}>
+            <span class="rcpo-uploader-glyph" in:fade={{ duration: duration }}>
+                <i class="bx bx-image-add"></i>
             </span>
         </ChatFileUploader>
     {/if}
 </div>
 {/if}
+

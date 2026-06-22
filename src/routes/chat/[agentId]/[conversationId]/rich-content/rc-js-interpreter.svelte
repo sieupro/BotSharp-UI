@@ -4,19 +4,22 @@
     import 'overlayscrollbars/overlayscrollbars.css';
     import { OverlayScrollbars } from 'overlayscrollbars';
     import { v4 as uuidv4 } from 'uuid';
-	import LoadingDots from "$lib/common/LoadingDots.svelte";
+	import LoadingDots from "$lib/common/spinners/LoadingDots.svelte";
 
-    /** @type {import('$conversationTypes').ChatResponseModel?} */
-    export let message;
-
-   /** @type {string} */
-    export let containerClasses = '';
-
-    /** @type {string} */
-    export let containerStyles = '';
-
-    /** @type {boolean} */
-	export let scrollable = false;
+    /**
+     * @type {{
+     *   message?: import('$conversationTypes').ChatResponseModel | null,
+     *   containerClasses?: string,
+     *   containerStyles?: string,
+     *   scrollable?: boolean
+     * }}
+     */
+    let {
+        message = null,
+        containerClasses = '',
+        containerStyles = '',
+        scrollable = false
+    } = $props();
 
     const scrollbarId = `js-interpreter-scrollbar-${uuidv4()}`;
     const options = {
@@ -32,7 +35,7 @@
 	};
 
     /** @type {boolean} */
-    let isLoading = false;
+    let isLoading = $state(false);
 
     onMount(() => {
         if (scrollable) {
@@ -52,7 +55,7 @@
 
     function initCode() {
         try {
-            const text = message?.rich_content?.message?.text || message?.text || '';
+            const text = message?.rich_content?.message?.code_script || message?.rich_content?.message?.text || message?.text || '';
             const parsedText = marked.lexer(text);
             // @ts-ignore
             const codeText = parsedText.filter(x => !!x.text).map(x => x.text).join('');
@@ -126,14 +129,15 @@
 
 <div class={`${containerClasses}`} style={`${containerStyles}`}>
     {#if message?.text}
-        <div class="mb-3">{message.text}</div>
+        <div class="rcj-section">{message.text}</div>
     {/if}
     {#if isLoading}
-        <div class="mb-3">
-            <LoadingDots duration={'1s'} size={5} gap={3} color={'var(--bs-primary)'} />
+        <div class="rcj-section">
+            <LoadingDots duration={'1s'} size={5} gap={3} color={'var(--color-primary)'} />
         </div>
     {/if}
     <div id={`${scrollbarId}`}>
-        <div id={`chart-${message?.message_id}`} style="min-width: 800px; max-height: 500px;"></div>
+        <div id={`chart-${message?.message_id}`} class="rcj-chart"></div>
     </div>
 </div>
+

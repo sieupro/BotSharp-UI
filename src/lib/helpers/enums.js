@@ -29,6 +29,7 @@ const richType = {
     Generic: 'generic_template',
     Upload: 'upload_template',
     ProgramCode: 'program_code',
+    Embedding: 'embedding_template'
 }
 export const RichType = Object.freeze(richType);
 
@@ -77,6 +78,12 @@ const agentType = {
 };
 export const AgentType = Object.freeze(agentType);
 
+const agentCodeScriptType = {
+    Src: 'src',
+    Test: 'test'
+};
+export const AgentCodeScriptType = Object.freeze(agentCodeScriptType);
+
 const routingMode = {
     Eager: "eager",
     Lazy: "lazy"
@@ -99,17 +106,21 @@ const agentTaskStatus = {
 export const AgentTaskStatus = Object.freeze(agentTaskStatus);
 
 
-const knowledgeCollectionType = {
+const knowledgeType = {
     QuestionAnswer: 'question-answer',
-    Document: 'document'
+    Document: 'document',
+    Taxonomy: 'taxonomy',
+    SemanticGraph: 'semantic-graph'
 };
-export const KnowledgeCollectionType = Object.freeze(knowledgeCollectionType);
+export const KnowledgeBaseType = Object.freeze(knowledgeType);
 
-const knowledgeCollectionDisplayType =  {
-    [knowledgeCollectionType.QuestionAnswer]: "Q & A",
-    [knowledgeCollectionType.Document]: "Documents",
+const knowledgeBaseDisplayType =  {
+    [knowledgeType.QuestionAnswer]: "Q & A",
+    [knowledgeType.Document]: "Documents",
+    [knowledgeType.Taxonomy]: "Taxonomy",
+    [knowledgeType.SemanticGraph]: "Semantic Graph",
 };
-export const KnowledgeCollectionDisplayType = Object.freeze(knowledgeCollectionDisplayType);
+export const KnowledgeBaseDisplayType = Object.freeze(knowledgeBaseDisplayType);
 
 const knowledgePayloadName = {
     Text: 'text',
@@ -161,7 +172,8 @@ const chatAction = {
     Logout: 'logout',
     Chat: 'chat',
     NewChat: 'new-chat',
-    ReceiveNotification: 'receive-notification'
+    ReceiveNotification: 'receive-notification',
+    NewWindow: 'new-window'
 };
 export const ChatAction = Object.freeze(chatAction);
 
@@ -203,21 +215,52 @@ const globalEvent = {
 export const GlobalEvent = Object.freeze(globalEvent);
 
 const llmModelType = {
-    Text: 1,
-    Chat: 2,
-    Image: 3,
-    Embedding: 4,
-    Audio: 5
+    All: "All",
+    Text: "Text",
+    Chat: "Chat",
+    Image: "Image",
+    Embedding: "Embedding",
+    Audio: "Audio",
+    Realtime: "Realtime",
+    Web: "Web"
 };
 export const LlmModelType = Object.freeze(llmModelType);
 
+const llmModelCapability = {
+    All: "All",
+    Text: "Text",
+    Chat: "Chat",
+    ImageReading: "ImageReading",
+    ImageGeneration: "ImageGeneration",
+    ImageEdit: "ImageEdit",
+    ImageVariation: "ImageVariation",
+    ImageComposition: "ImageComposition",
+    Embedding: "Embedding",
+    AudioTranscription: "AudioTranscription",
+    AudioGeneration: "AudioGeneration",
+    Realtime: "Realtime",
+    WebSearch: "WebSearch",
+    PdfReading: "PdfReading"
+};
+export const LlmModelCapability = Object.freeze(llmModelCapability);
+
 const reasoningEffortLevel = {
+    None: "none",
     Minimal: "minimal",
     Low: "low",
     Medium: "medium",
-    High: "high"
+    High: "high",
+    XHigh: "xhigh"
 };
 export const ReasoningEffortLevel = Object.freeze(reasoningEffortLevel);
+
+const responseFormat = {
+    Json: "json",
+    Xml: "xml",
+    Md: "markdown",
+    Yaml: "yaml"
+};
+export const ResponseFormat = Object.freeze(responseFormat);
 
 const timeRange = {
     Last15Minutes: "Last 15 minutes",

@@ -1,70 +1,111 @@
 <script>
-    import { createEventDispatcher } from 'svelte';
     import { _ } from 'svelte-i18n';
-    import { Button } from "@sveltestrap/sveltestrap";
 	import { utcToLocal } from "$lib/helpers/datetime";
 	import { replaceNewLine } from "$lib/helpers/http";
 
-    const svelteDispatch = createEventDispatcher();
-
-    /** @type {import('$agentTypes').AgentTaskModel} */
-    export let task;
-
-    /** @type {boolean} */
-    export let disabled = false;
+    /**
+     * @type {{
+     *   task: import('$agentTypes').AgentTaskModel,
+     *   onsave?: (task: import('$agentTypes').AgentTaskModel) => void,
+     *   ondelete?: (task: import('$agentTypes').AgentTaskModel) => void
+     * }}
+     */
+    let {
+        task,
+        onsave,
+        ondelete
+    } = $props();
 
     function toggleTask() {
         task.enabled = !task.enabled;
     }
 
     function handleSaveTask() {
-        svelteDispatch("save", {
-            task: task
-        });
+        onsave?.(task);
     }
 
     function handleDeleteTask() {
-        svelteDispatch("delete", {
-            task: task
-        });
+        ondelete?.(task);
     }
 </script>
 
-<tr>
-    <td scope="row" class="text-primary">{task.name}</td>
-    <td>{task.description}</td>
-    <td>{task.agent_name}</td>
-    <td><div style="max-height: 100px;" class="scrollbar">{@html replaceNewLine(task.content)}</div></td>
-    <td>{utcToLocal(task.updated_time)}</td>
+<tr class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40">
     <td>
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <span class="clickable" on:click={() => toggleTask()}>
-            {#if task.enabled}
-                <span class="badge bg-success">{$_("Enabled")}</span>
-            {:else}
-                <span class="badge bg-danger">{$_("Disabled")}</span>
-            {/if}
-        </span>
+        <span class="font-medium text-primary">{task.name}</span>
     </td>
-    <td><span class="badge bg-info">{task.status}</span></td>
     <td>
-        <ul class="list-unstyled hstack gap-1 mb-0">
-            <li data-bs-toggle="tooltip" data-bs-placement="top" title="View">
-                <a href="page/task/{task.id}?agentId={task.agent_id}" target="_blank" class="btn btn-sm btn-soft-primary">
-                    <i class="mdi mdi-eye-outline" />
-                </a>
-            </li>
-            <li data-bs-toggle="tooltip" data-bs-placement="top" title="Save">
-                <Button on:click={() => handleSaveTask()} class="btn btn-sm btn-soft-info">
-                    <i class="mdi mdi-content-save-all" />
-                </Button>
-            </li>
-            <li data-bs-toggle="tooltip" data-bs-placement="top" title="Delete">
-                <Button on:click={() => handleDeleteTask()} class="btn btn-sm btn-soft-danger">
-                    <i class="mdi mdi-delete-outline" />
-                </Button>
-            </li>
-        </ul>
+        <span class="text-dark dark:text-gray-100">{task.description || '—'}</span>
+    </td>
+    <td>
+        {#if task.agent_name}
+            <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                <i class="mdi mdi-robot-outline text-sm leading-none"></i>
+                {task.agent_name}
+            </span>
+        {:else}
+            <span class="text-muted italic">—</span>
+        {/if}
+    </td>
+    <td class="!whitespace-normal">
+        <div class="scrollbar max-h-[100px] max-w-md overflow-auto rounded-md bg-gray-50 p-2 text-xs leading-relaxed text-dark dark:bg-gray-700/50 dark:text-gray-100">
+            {@html replaceNewLine(task.content)}
+        </div>
+    </td>
+    <td>
+        <span class="text-xs text-muted">{utcToLocal(task.updated_time)}</span>
+    </td>
+    <td>
+        <button
+            type="button"
+            class="cursor-pointer"
+            onclick={() => toggleTask()}
+            aria-label={task.enabled ? 'Disable task' : 'Enable task'}
+        >
+            {#if task.enabled}
+                <span class="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                    <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+                    {$_("Enabled")}
+                </span>
+            {:else}
+                <span class="inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-medium text-danger">
+                    <span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
+                    {$_("Disabled")}
+                </span>
+            {/if}
+        </button>
+    </td>
+    <td>
+        <span class="inline-flex items-center rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info">{task.status}</span>
+    </td>
+    <td>
+        <div class="flex items-center justify-start gap-1.5">
+            <a
+                href="page/task/{task.id}?agentId={task.agent_id}"
+                target="_blank"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary transition-all hover:scale-105 hover:bg-primary/20"
+                aria-label="View"
+                title="View"
+            >
+                <i class="mdi mdi-eye-outline"></i>
+            </a>
+            <button
+                type="button"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-info/15 text-info transition-all cursor-pointer hover:scale-105 hover:bg-info/25"
+                onclick={() => handleSaveTask()}
+                aria-label="Save"
+                title="Save"
+            >
+                <i class="mdi mdi-content-save-all"></i>
+            </button>
+            <button
+                type="button"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-danger/10 text-danger transition-all cursor-pointer hover:scale-105 hover:bg-danger/20"
+                onclick={() => handleDeleteTask()}
+                aria-label="Delete"
+                title="Delete"
+            >
+                <i class="mdi mdi-delete-outline"></i>
+            </button>
+        </div>
     </td>
 </tr>

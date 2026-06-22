@@ -110,6 +110,15 @@ IRichContent.prototype.elements;
 IRichContent.prototype.quick_replies;
 
 /**
+ * The code rich content.
+ *
+ * @name language
+ * @type {string}
+ * @instance
+ */
+IRichContent.prototype.code_script;
+
+/**
  * The language of the code rich content.
  *
  * @name language
@@ -117,6 +126,33 @@ IRichContent.prototype.quick_replies;
  * @instance
  */
 IRichContent.prototype.language;
+
+/**
+ * The URL of the embedding rich content.
+ *
+ * @name url
+ * @type {string}
+ * @instance
+ */
+IRichContent.prototype.url;
+
+/**
+ * The title of the embedding rich content.
+ *
+ * @name title
+ * @type {string}
+ * @instance
+ */
+IRichContent.prototype.title;
+
+/**
+ * The html tag of the embedding rich content.
+ *
+ * @name html_tag
+ * @type {string}
+ * @instance
+ */
+IRichContent.prototype.html_tag;
 
 
 /**
@@ -171,6 +207,8 @@ IRichContent.prototype.language;
  * @property {boolean} is_dummy
  * @property {boolean} is_appended
  * @property {string} [indication]
+ * @property {any} [thought]
+ * @property {any} [meta_data]
  */
 
 /**
@@ -314,7 +352,9 @@ IRichContent.prototype.language;
  * @property {string?} [status]
  * @property {UserStateDetailModel[]} states
  * @property {string[]} tags
- * @property {string?} [timeRange]
+ * @property {string} [timeRange]
+ * @property {string} [startDate] - When timeRange is "Custom date", start date in YYYY-MM-DD format (e.g. 2026-01-25)
+ * @property {string} [endDate] - When timeRange is "Custom date", end date in YYYY-MM-DD format (e.g. 2026-01-30). Defaults to startDate if not provided
  */
 
 /**

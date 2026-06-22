@@ -1,206 +1,92 @@
 <script>
     import { onMount } from 'svelte';
-    import { Card, CardBody, Input } from '@sveltestrap/sveltestrap';
-    import { getLlmProviders, getLlmProviderModels } from '$lib/services/llm-provider-service';
-	import { INTEGER_REGEX } from '$lib/helpers/constants';
-	import { ReasoningEffortLevel } from '$lib/helpers/enums';
-    
-    /** @type {import('$agentTypes').AgentModel} */
-    export let agent;
+    import { getLlmConfigs } from '$lib/services/llm-provider-service';
+    import { LlmModelCapability, LlmModelType } from '$lib/helpers/enums';
+    import ChatConfig from './llm-configs/chat-config.svelte';
+    import LlmBasicConfig from './llm-configs/llm-basic-config.svelte';
+    import RealtimeConfig from './llm-configs/realtime-config.svelte';
 
-    /** @type {() => void} */
-    export let handleAgentChange = () => {};
+    /**
+     * @type {{
+     *   agent: import('$agentTypes').AgentModel,
+     *   handleAgentChange?: () => void
+     * }}
+     */
+    let {
+        agent,
+        handleAgentChange = () => {}
+    } = $props();
 
-    export const fetchLlmConfig = () => {
-        const reasoningEffort = models.find(x => x.name === config.model)?.reasoning != null ? config.reasoning_effort_level : null;
+    export function fetchLlmConfig() {
+        const chatConfig = chatConfigCmp?.fetchConfig();
+        const imageCompositionConfig = imageCompositionConfigCmp?.fetchConfig();
+        const audioTranscriptionConfig = audioTranscriptionConfigCmp?.fetchConfig();
+        const realtimeConfig = realtimeConfigCmp?.fetchConfig();
         return {
-            ...config,
-            max_output_tokens: Number(config.max_output_tokens) > 0 ? Number(config.max_output_tokens) : null,
-            reasoning_effort_level: reasoningEffort
+            ...chatConfig,
+            image_composition: imageCompositionConfig ? {...imageCompositionConfig} : null,
+            audio_transcription: audioTranscriptionConfig ? {...audioTranscriptionConfig} : null,
+            realtime: realtimeConfig ? {...realtimeConfig} : null
         };
     }
 
-    const recursiveDepthLowerLimit = 1;
-    
-    /** @type {import('$commonTypes').LabelValuePair[]} */
-	const reasonLevelOptions = [
-        { value: '', label: '' },
-        ...Object.entries(ReasoningEffortLevel).map(([k, v]) => ({
-            value: v,
-            label: v
-        }))
-    ];
+    /** @type {any} */
+    let chatConfigCmp = $state(null);
+    /** @type {any} */
+    let imageCompositionConfigCmp = $state(null);
+    /** @type {any} */
+    let audioTranscriptionConfigCmp = $state(null);
+    /** @type {any} */
+    let realtimeConfigCmp = $state(null);
 
-    let config = agent.llm_config;
+    /** @type {import('$commonTypes').LlmConfig[]} */
+    let llmConfigs = $state([]);
 
-    /** @type {string[]} */
-    let providers = [];
-
-    /** @type {import('$commonTypes').LlmModelSetting[]} */
-    let models = [];
-
-    $: isReasoningModel = models.find(x => x.name === config.model)?.reasoning != null;
-
-    onMount(async () =>{
-        await init();
+    onMount(async () => {
+        llmConfigs = await getLlmConfigs();
     });
-
-    async function init() {
-        providers = await getLlmProviders();
-        providers = ['', ...providers]
-        if (!!config.provider) {
-            models = await getLlmProviderModels(config.provider);
-        }
-        const foundProvider = providers.find(x => x === config.provider);
-        const foundModel = models.find(x => x.name === config.model);
-        config.provider = foundProvider || null;
-        config.model = foundModel?.name || null;
-    }
-
-    
-
-    /** @param {any} e */
-    async function changeProvider(e) {
-        const provider = e.target.value;
-        config.provider = provider || null;
-
-        if (!!!provider) {
-            models = [];
-            config.model = null;
-            config.reasoning_effort_level = null;
-            handleAgentChange();
-            return;
-        }
-
-        config.is_inherit = false;
-        models = await getLlmProviderModels(provider);
-        config.model = models[0]?.name;
-        handleAgentChange();
-    }
-
-    /** @param {any} e */
-    function changeModel(e) {
-        config.is_inherit = false;
-        config.model = e.target.value || null;
-        handleAgentChange();
-    }
-
-    /** @param {any} e */
-    function changeMaxRecursiveDepth(e) {
-        let value = Number(e.target.value) || 0;
-        
-        if (value < recursiveDepthLowerLimit) {
-            value = recursiveDepthLowerLimit;
-        }
-
-        config.max_recursion_depth = value;
-        handleAgentChange();
-    }
-
-    /** @param {any} e */
-    function changeMaxOutputToken(e) {
-        const value = Number(e.target.value) || 0;
-        config.max_output_tokens = value;
-        handleAgentChange();
-    }
-
-    /** @param {any} e */
-    function changeReasoningEffortLevel(e) {
-        config.reasoning_effort_level = e.target.value || null;
-        handleAgentChange();
-    }
-
-    /** @param {any} e */
-    function validateIntegerInput(e) {
-        const reg = new RegExp(INTEGER_REGEX, 'g');
-        if (e.key !== 'Backspace' && !reg.test(e.key)) {
-            e.preventDefault();
-        }
-    }
 </script>
 
-<Card>
-    <CardBody>
-        <div class="text-center">
-            <h5 class="mt-1 mb-3">LLM Config</h5>
-            <img src="images/brands/azure-openai-logo.avif" alt="" height="50" />
-            {#if agent.llm_config?.is_inherit}
-                <i class="bx bx-copy"></i> <span class="text-muted">Inherited</span>    
-            {/if}
+<div class="llmc-card">
+    <div class="llmc-card-body">
+        <div class="llmc-header">
+            <h5 class="llmc-title">LLM Configurations</h5>
+            <img src="images/brands/azure-openai-logo.avif" alt="" class="llmc-brand-logo" />
         </div>
 
-        <div class="mb-3 row">
-            <label for="example-large" class="col-md-3 col-form-label">
-                Provider
-            </label>
-            <div class="col-md-9 config-item-container">
-                <Input type="select" value={config.provider} on:change={e => changeProvider(e)}>
-                    {#each providers as option}
-                        <option value={option} selected={option == config.provider}>{option}</option>
-                    {/each}
-                </Input>
-            </div>
+        <div class="llmc-list">
+            <ChatConfig
+                bind:this={chatConfigCmp}
+                {agent}
+                {llmConfigs}
+                {handleAgentChange}
+            />
+            <LlmBasicConfig
+                title="Image Composition"
+                bind:this={imageCompositionConfigCmp}
+                llmConfigOptions={llmConfigs}
+                llmConfig={agent.llm_config?.image_composition}
+                modelType={LlmModelType.Image}
+                modelCapability={LlmModelCapability.ImageComposition}
+                {handleAgentChange}
+            />
+            <LlmBasicConfig
+                title="Audio Transcription"
+                bind:this={audioTranscriptionConfigCmp}
+                llmConfigOptions={llmConfigs}
+                llmConfig={agent.llm_config?.audio_transcription}
+                modelType={LlmModelType.Audio}
+                modelCapability={LlmModelCapability.AudioTranscription}
+                {handleAgentChange}
+            />
+            <RealtimeConfig
+                title="Realtime"
+                bind:this={realtimeConfigCmp}
+                llmConfigOptions={llmConfigs}
+                llmConfig={agent.llm_config?.realtime}
+                {handleAgentChange}
+            />
         </div>
-        
-        <div class="mb-3 row">
-            <label for="example-text-input" class="col-md-3 col-form-label">
-                Model
-            </label>
-            <div class="col-md-9">
-                <Input type="select" value={config.model} disabled={models.length === 0} on:change={e => changeModel(e)}>
-                    {#each models as option}
-                        <option value={option.name} selected={option.name == config.model}>{option.name}</option>
-                    {/each}
-                </Input>
-            </div>
-        </div>
+    </div>
+</div>
 
-        <div class="mb-3 row">
-            <label for="example-text-input" class="col-md-3 col-form-label">
-                Max recursive depth
-            </label>
-            <div class="col-md-9">
-                <Input
-                    style="text-align: center;"
-                    type="number"
-                    min={recursiveDepthLowerLimit}
-                    value={config.max_recursion_depth}
-                    on:keydown={e => validateIntegerInput(e)}
-                    on:change={e => changeMaxRecursiveDepth(e)}
-                />
-            </div>
-        </div>
-
-        <div class="mb-3 row">
-            <label for="example-text-input" class="col-md-3 col-form-label">
-                Max output tokens
-            </label>
-            <div class="col-md-9">
-                <Input
-                    style="text-align: center;"
-                    type="number"
-                    value={config.max_output_tokens}
-                    on:keydown={e => validateIntegerInput(e)}
-                    on:change={e => changeMaxOutputToken(e)}
-                />
-            </div>
-        </div>
-
-        {#if isReasoningModel}
-        <div class="mb-3 row">
-            <label for="example-text-input" class="col-md-3 col-form-label">
-                Reasoning effort
-            </label>
-            <div class="col-md-9">
-                <Input type="select" value={config.reasoning_effort_level} on:change={e => changeReasoningEffortLevel(e)}>
-                    {#each reasonLevelOptions as option}
-                        <option value={option.value} selected={option.value == config.reasoning_effort_level}>
-                            {option.label}
-                        </option>
-                    {/each}
-                </Input>
-            </div>
-        </div>
-        {/if}
-    </CardBody>
-</Card>

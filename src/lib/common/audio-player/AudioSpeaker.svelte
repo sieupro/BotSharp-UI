@@ -2,7 +2,7 @@
 	import { initSpeech, stopAll, clearSpeakerInstantce } from "$lib/common/audio-player/store";
 	import { onMount, onDestroy } from "svelte";
   import { v4 as uuidv4 } from 'uuid';
-	import Stretch from "../Stretch.svelte";
+	import Stretch from "../shared/Stretch.svelte";
 
   /** @type {string} */
   export let text;
@@ -87,16 +87,17 @@
   class="{disableDefaultStyles ? '' : 'chat-speaker-container'} line-align-center {containerClasses}"
   style={`${containerStyles}`}
 >
-  <div on:click={() => speak()}>
+  <div class="inline-flex items-center cursor-pointer" on:click={() => speak()}>
     {#if !speaking}
       <i
-        class="bx bx-volume-full clickable"
+        class="bx bx-volume-full"
         data-bs-toggle="tooltip"
         data-bs-placement="top"
         title="Play"
-      />
+      >
+      </i>
     {:else}
-      <Stretch unit='px' size='5' gap='5' color="var(--bs-primary)" />
+      <Stretch unit='px' size='2' gap='2' color="var(--color-primary)" />
     {/if}
   </div>
 </div>

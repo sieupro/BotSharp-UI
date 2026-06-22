@@ -1,19 +1,17 @@
 <script>
-    /** @type {any} */
-    export let data;
+    /** @type {{ data: any }} */
+    let { data } = $props();
 
-    /** @type {string} */
-    let beforeActiveRoundText = '';
-    let afterActiveRoundText = '';
-    let beforeDataValue = '';
-    let afterDataValue = '';
     const defaultValue = '-';
 
-    $: {
-        beforeDataValue = buildDataValue(data?.before_value);
-        afterDataValue = buildDataValue(data?.after_value);
-        beforeActiveRoundText = buildActiveRoundText(data?.before_value, data?.before_active_rounds);
-        afterActiveRoundText = buildActiveRoundText(data?.after_value, data?.after_active_rounds);
+    let collapsed = $state(true);
+
+    /** @param {KeyboardEvent} e @param {() => void} fn */
+    function handleKey(e, fn) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fn();
+        }
     }
 
     /** @param {any} value */
@@ -28,7 +26,7 @@
     function buildActiveRoundText(value, activeRounds) {
         let text = '';
 
-        if (!!!value) {
+        if (!value) {
             return text;
         }
 
@@ -40,35 +38,56 @@
 
         return text;
     }
+
+    let beforeDataValue = $derived(buildDataValue(data?.before_value));
+    let afterDataValue = $derived(buildDataValue(data?.after_value));
+    let beforeActiveRoundText = $derived(buildActiveRoundText(data?.before_value, data?.before_active_rounds));
+    let afterActiveRoundText = $derived(buildActiveRoundText(data?.after_value, data?.after_active_rounds));
 </script>
 
 {#if beforeDataValue != defaultValue || afterDataValue != defaultValue}
-<div class="log-element state-change-container">
-    <div class="log-meta state-key text-danger">
+<div class="mss-element">
+    <div class="mss-meta mss-state-key">
         <div>
             <span><b>{`${data?.name}`}</b></span>
             {#if !!data?.source}
-            <span class="state-source text-secondary">{`${data?.source}`}</span>
+            <span class="mss-state-source">{`${data?.source}`}</span>
             {/if}
         </div>
     </div>
-    <div class="log-content state-value-container">
-        <div class="state-value">
-            <div class="value">
+    <div class="mss-content">
+        <div
+            class="mss-state-value"
+            class:mss-state-value-collapsed={collapsed}
+            role="button"
+            tabindex="0"
+            title={collapsed ? 'Click to expand' : 'Click to collapse'}
+            onclick={() => (collapsed = !collapsed)}
+            onkeydown={(e) => handleKey(e, () => (collapsed = !collapsed))}
+        >
+            <div class="mss-value">
                 {beforeDataValue}
             </div>
-            {#if !!beforeActiveRoundText}
-            <div class="active-rounds">
+            {#if !!beforeActiveRoundText && !collapsed}
+            <div class="mss-active-rounds">
                 {`${beforeActiveRoundText}`}
             </div>
             {/if}
         </div>
-        <div class="state-value text-warning">
-            <div class="value">
+        <div
+            class="mss-state-value mss-state-value-warn"
+            class:mss-state-value-collapsed={collapsed}
+            role="button"
+            tabindex="0"
+            title={collapsed ? 'Click to expand' : 'Click to collapse'}
+            onclick={() => (collapsed = !collapsed)}
+            onkeydown={(e) => handleKey(e, () => (collapsed = !collapsed))}
+        >
+            <div class="mss-value">
                 {afterDataValue}
             </div>
-            {#if !!afterActiveRoundText}
-            <div class="active-rounds">
+            {#if !!afterActiveRoundText && !collapsed}
+            <div class="mss-active-rounds">
                 {`${afterActiveRoundText}`}
             </div>
             {/if}
@@ -76,3 +95,4 @@
     </div>
 </div>
 {/if}
+

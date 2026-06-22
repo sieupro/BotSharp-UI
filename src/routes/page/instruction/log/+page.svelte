@@ -3,36 +3,32 @@
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
     import util from "lodash";
-	import { Button, Card, CardBody, Col, Input, Row, Table } from '@sveltestrap/sveltestrap';
-	import HeadTitle from '$lib/common/HeadTitle.svelte';
-    import Breadcrumb from '$lib/common/Breadcrumb.svelte';
-	import TablePagination from '$lib/common/TablePagination.svelte';
+	import HeadTitle from '$lib/common/shared/HeadTitle.svelte';
+    import Breadcrumb from '$lib/common/shared/Breadcrumb.svelte';
+	import TablePagination from '$lib/common/shared/TablePagination.svelte';
 	import { getAgentOptions } from '$lib/services/agent-service';
 	import { getLlmConfigs } from '$lib/services/llm-provider-service';
-	import { getInstructionLogs, getInstructionLogSearchKeys } from '$lib/services/instruct-service';
-	import LoadingToComplete from '$lib/common/LoadingToComplete.svelte';
-	import LogItem from './log-item.svelte';
-	import { convertTimeRange, removeDuplicates } from '$lib/helpers/utils/common';
-	import StateSearch from '$lib/common/StateSearch.svelte';
-	import Select from '$lib/common/Select.svelte';
+	import { getInstructionLogSearchKeys } from '$lib/services/instruct-service';
+	import { getInstructionLogs } from '$lib/services/logging-service';
+	import LoadingToComplete from '$lib/common/spinners/LoadingToComplete.svelte';
+	import { convertTimeRange, removeDuplicates, formatNumber } from '$lib/helpers/utils/common';
+	import StateSearch from '$lib/common/shared/StateSearch.svelte';
+	import Select from '$lib/common/dropdowns/Select.svelte';
+	import TimeRangePicker from '$lib/common/shared/TimeRangePicker.svelte';
 	import {
 		getPagingQueryParams,
 		setUrlQueryParams,
 		goToUrl
 	} from '$lib/helpers/utils/common';
 	import { TimeRange } from '$lib/helpers/enums';
-	import { TIME_RANGE_OPTIONS } from '$lib/helpers/constants';
+	import LogItem from './log-item.svelte';
 
     const firstPage = 1;
 	const pageSize = 15;
     let isLoading = false;
+	let isPageMounted = false;
 
     const initPager = { page: firstPage, size: pageSize };
-
-	const timeRangeOptions = TIME_RANGE_OPTIONS.map(x => ({
-		label: x.label,
-		value: x.value
-	}));
 
     /** @type {import('$commonTypes').Pagination} */
 	let pager = { page: firstPage, size: pageSize, count: 0 }
@@ -62,6 +58,8 @@
 		models: [],
         template: '',
 		timeRange: TimeRange.Today,
+		startDate: '',
+		endDate: '',
 		states: []
 	};
 
@@ -74,17 +72,19 @@
 	/** @type {boolean} */
 	let showStateSearch = false;
 
+
 	/** @type {{key: string, value: string | null}[]} */
     let states = [
         { key: '', value: ''}
     ];
 
     onMount(async () => {
+		isPageMounted = true;
 		const { pageNum, pageSizeNum } = getPagingQueryParams({
 			page: $page.url.searchParams.get("page"),
 			pageSize: $page.url.searchParams.get("pageSize")
 		}, { defaultPageSize: pageSize });
-		innerTimeRange = convertTimeRange(searchOption.timeRange);
+		innerTimeRange = convertTimeRange(searchOption.timeRange, searchOption.startDate, searchOption.endDate);
 
 		filter = {
 			...filter,
@@ -145,7 +145,7 @@
     function getPagedInstructionLogs() {
         logItems = [];
         isLoading = true;
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             getInstructionLogs(filter).then(res => {
                 refresh(res);
                 resolve(res);
@@ -177,7 +177,10 @@
 		setUrlQueryParams($page.url, [
 			{ key: 'page', value: `${pager.page}` },
 			{ key: 'pageSize', value: `${pager.size}` }
-		], () => goToUrl(`${$page.url.pathname}${$page.url.search}`));
+		], (url) => {
+			if (!isPageMounted) return;
+			goToUrl(`${url.pathname}${url.search}`);
+		});
 	}
 
     /**
@@ -217,10 +220,7 @@
 				models: selectedValues
 			};
         } else if (type === 'timeRange') {
-			searchOption = {
-				...searchOption,
-				timeRange: selectedValues.length > 0 ? selectedValues[0] : null
-			};
+			// This handler is no longer used, but kept for compatibility
 		}
 	}
 
@@ -236,7 +236,7 @@
         const models = searchOption.models;
         const template = util.trim(searchOption.template) || null;
 		const states = getSearchStates();
-		innerTimeRange = convertTimeRange(searchOption.timeRange);
+		innerTimeRange = convertTimeRange(searchOption.timeRange, searchOption.startDate, searchOption.endDate);
 
         filter = {
             ...filter,
@@ -289,47 +289,49 @@
 
 <HeadTitle title="{$_('Instruction Log')}" />
 <Breadcrumb pagetitle="{$_('Log')}" title="{$_('Instruction')}"/>
+
 <LoadingToComplete isLoading={isLoading} />
 
-<Row>
-	<Col lg="12">
-		<Card>
-			<CardBody class="border-bottom">
-				<div class="d-flex flex-wrap align-items-center justify-content-between">
-					<div class="mb-0 card-title flex-grow-0">
-						<h5 class="mb-0 card-title flex-grow-1">{$_('Log List')}</h5>
+<div class="flex flex-wrap">
+	<div class="w-full">
+		<div class="rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
+			<div class="border-b border-gray-100 px-6 py-4 dark:border-gray-700">
+				<div class="flex flex-wrap items-center justify-between gap-3">
+					<div class="flex items-center gap-3">
+						<span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+							<i class="mdi mdi-text-box-search-outline text-xl"></i>
+						</span>
+						<div>
+							<h5 class="mb-0 text-base font-semibold text-dark dark:text-gray-100">{$_('Log List')}</h5>
+							<p class="mb-0 text-xs text-muted">{formatNumber(pager.count)} {pager.count === 1 ? 'log entry' : 'log entries'} total</p>
+						</div>
 					</div>
-					<div class="state-search-btn-wrapper">
-						<Button
-							color={showStateSearch ? 'secondary' : 'primary'}
-							on:click={() => showStateSearch = !showStateSearch}
-						>
-							<div class="state-search-btn">
-								<div>
-									{#if showStateSearch}
-										<i class="bx bx-hide" />
-									{:else}
-										<i class="bx bx-search-alt" />
-									{/if}
-								</div>
-								<div class="search-btn-text">{'State Search'}</div>
-							</div>
-						</Button>
+					<button
+						type="button"
+						class="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium shadow-sm transition-colors {showStateSearch ? 'bg-gray-200 text-dark hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600' : 'bg-primary text-white hover:bg-primary-hover'}"
+						onclick={() => showStateSearch = !showStateSearch}
+					>
+						{#if showStateSearch}
+							<i class="bx bx-hide text-base leading-none"></i>
+						{:else}
+							<i class="bx bx-search-alt text-base leading-none"></i>
+						{/if}
+						<span class="search-btn-text">{'State Search'}</span>
+					</button>
+				</div>
+			</div>
+			{#if showStateSearch}
+				<div class="instruct-state-search border-b border-gray-100 px-6 py-4 dark:border-gray-700">
+					<div class="flex justify-end">
+						<div class="w-full lg:w-1/2">
+							<StateSearch bind:states={states} onSearch={(query) => handleStateSearch(query)} />
+						</div>
 					</div>
 				</div>
-			</CardBody>
-			{#if showStateSearch}
-				<CardBody class="border-bottom">
-					<Row class="g-3 justify-content-end">
-						<Col lg="6">
-							<StateSearch bind:states={states} onSearch={(query) => handleStateSearch(query)} />
-						</Col>
-					</Row>
-				</CardBody>
 			{/if}
-			<CardBody class="border-bottom">
-				<Row class="g-3">
-					<Col lg="3">
+			<div class="instruct-filter border-b border-gray-100 px-6 py-4 dark:border-gray-700">
+				<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
+					<div class="lg:col-span-3">
 						<Select
 							tag={'agent-select'}
 							placeholder={'Select agents'}
@@ -338,20 +340,28 @@
 							searchMode
 							selectedValues={searchOption.agentIds}
 							options={agentOptions}
-							on:select={e => changeOption(e, 'agent')}
-						/>
-					</Col>
-					<Col lg="2">
+							onselect={e => changeOption(e, 'agent')}
+						>
+							{#snippet prefixIcon()}
+								<i class="mdi mdi-robot-outline"></i>
+							{/snippet}
+						</Select>
+					</div>
+					<div class="lg:col-span-2">
 						<Select
 							tag={'llm-provider-select'}
 							placeholder={'Select LLM provider'}
 							searchMode
 							selectedValues={searchOption.providers}
 							options={providerOptions}
-							on:select={e => changeOption(e, 'provider')}
-						/>
-					</Col>
-					<Col lg="2">
+							onselect={e => changeOption(e, 'provider')}
+						>
+							{#snippet prefixIcon()}
+								<i class="mdi mdi-chip"></i>
+							{/snippet}
+						</Select>
+					</div>
+					<div class="lg:col-span-2">
 						<Select
 							tag={'llm-model-select'}
 							placeholder={'Select LLM model'}
@@ -360,60 +370,81 @@
 							searchMode
 							selectedValues={searchOption.models}
 							options={modelOptions}
-							on:select={e => changeOption(e, 'model')}
-						/>
-					</Col>
-					<Col lg="2">
-						<Input bind:value={searchOption.template} maxlength={100} placeholder={'Search template...'} />
-					</Col>
-					<Col lg="2">
-						<Select
-							tag={'instruct-datetime-select'}
-							placeholder={'Select time range'}
-							selectedText={''}
-							selectedValues={searchOption.timeRange ? [searchOption.timeRange] : []}
-							options={timeRangeOptions}
-							on:select={e => changeOption(e, 'timeRange')}
-						/>
-					</Col>
-					<Col lg="1">
-						<Button
-							type="button"
-							color="secondary"
-							class="btn-soft-secondary w-100"
-							on:click={(e) => search()}
+							onselect={e => changeOption(e, 'model')}
 						>
-							<i class="mdi mdi-filter-outline align-middle" />
-							<span class="d-none">{$_('Filter')}</span>
-						</Button>
-					</Col>
-				</Row>
-			</CardBody>
-			<CardBody>
-				<div class="table-responsive thin-scrollbar">
-					<Table class="align-middle nowrap users-table" bordered>
-						<thead>
+							{#snippet prefixIcon()}
+								<i class="mdi mdi-cube-outline"></i>
+							{/snippet}
+						</Select>
+					</div>
+					<div class="lg:col-span-2">
+						<div class="relative">
+							<span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+								<i class="mdi mdi-file-document-outline text-base leading-none"></i>
+							</span>
+							<input
+								type="text"
+								class="h-10 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-sm text-dark transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+								bind:value={searchOption.template}
+								maxlength={100}
+								placeholder={'Search template...'}
+							/>
+						</div>
+					</div>
+					<div class="lg:col-span-2">
+						<TimeRangePicker
+							storageKey="botsharp_instruction_recent_time_ranges"
+							bind:timeRange={searchOption.timeRange}
+							bind:startDate={searchOption.startDate}
+							bind:endDate={searchOption.endDate}
+							onchange={(data) => {
+								// Only update searchOption, don't trigger query immediately
+								searchOption.timeRange = data.timeRange;
+								searchOption.startDate = data.startDate;
+								searchOption.endDate = data.endDate;
+							}}
+						>
+							{#snippet prefixIcon()}
+								<i class="mdi mdi-clock-outline"></i>
+							{/snippet}
+						</TimeRangePicker>
+					</div>
+					<div class="lg:col-span-1">
+						<button
+							type="button"
+							class="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-sm transition-colors cursor-pointer hover:bg-primary-hover"
+							onclick={() => search()}
+						>
+							<i class="mdi mdi-filter-outline align-middle"></i>
+							<span class="sr-only">{$_('Filter')}</span>
+						</button>
+					</div>
+				</div>
+			</div>
+			<div class="p-4 sm:p-6">
+				<div class="thin-scrollbar overflow-x-auto rounded-lg ring-1 ring-gray-100 dark:ring-gray-700">
+					<table class="instruct-table w-full border-collapse text-sm">
+						<thead class="bg-gray-50 dark:bg-gray-700/50">
 							<tr>
-								<th scope="col" class="instruction-log-col ellipsis">{$_('Agent')}</th>
-								<th scope="col" class="instruction-log-col ellipsis">{$_('Llm Provider')}</th>
-								<th scope="col" class="instruction-log-col ellipsis">{$_('Llm Model')}</th>
-								<th scope="col" class="instruction-log-col ellipsis">{$_('Template')}</th>
-								<th scope="col" class="instruction-log-col ellipsis">{$_('Caller')}</th>
-                                <th scope="col" class="instruction-log-col ellipsis">{$_('Created Time')}</th>
-								<th scope="col">{$_('')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Agent')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Llm Provider')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Llm Model')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Template')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Caller')}</th>
+								<th scope="col" class="instruction-log-col">{$_('Created Time')}</th>
+								<th scope="col" class="text-start">{$_('Action')}</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each logItems as item, idx (idx)}
-                                <LogItem
-                                    item={item}
-                                />
-                            {/each}
+								<LogItem {item} />
+							{/each}
 						</tbody>
-					</Table>
+					</table>
 				</div>
 				<TablePagination pagination={pager} pageTo={(pn) => pageTo(pn)} />
-			</CardBody>
-		</Card>
-	</Col>
-</Row>
+			</div>
+		</div>
+	</div>
+</div>
+

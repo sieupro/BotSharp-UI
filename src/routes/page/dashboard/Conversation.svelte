@@ -1,40 +1,38 @@
 <script>
-	import { Card, CardBody, CardTitle, Col, Row } from '@sveltestrap/sveltestrap';
 	import { _ } from 'svelte-i18n';
 	import { onMount } from 'svelte';
 	import ChatTextArea from '../../chat/[agentId]/[conversationId]/chat-util/chat-text-area.svelte';
 	import { getConversation, updateDashboardConversation, unpinConversationFromDashboard } from '$lib/services/conversation-service';
 
-	/** @type {string}*/
-	export let conversationId;
-	/** @type {string}*/
-	export let instruction;
-	/** @type {string}*/
-	export let userId;
+	let {
+		conversationId = '',
+		instruction = '',
+		userId = ''
+	} = $props();
 
-	/** @type {import('$conversationTypes').ConversationModel}*/
-	let conversationModel;
+	/** @type {import('$conversationTypes').ConversationModel | undefined}*/
+	let conversationModel = $state(undefined);
 
-	let agent = {
+	let agent = $state({
 		name: "Loading",
 		icon_url: "https://botsharp.azurewebsites.net/images/users/bot.png"
-	};
-	
-	let isLoading = true;
+	});
+
+	let isLoading = $state(true);
 
 	/** @type {string} */
-	let hide = '';
-	
+	let hide = $state('');
+
 	/** @type {string} */
-	let text;
+	let text = $state('');
 	/** @type {boolean} */
-	let loadUtils;
-	
+	let loadUtils = $state(false);
+
 	/** @type {number} */
 	let messageInputTimeout = 0;
 
 	/** @type {string[]} */
-	let chatUtilOptions = [];
+	let chatUtilOptions = $state([]);
 
 	onMount(() => {
 			if (conversationId) {
@@ -60,7 +58,7 @@
 		)
 		.catch();
 	}
-	
+
 	/** @param {any} e */
     function handleMessageInput(e) {
         const value = e.target.value;
@@ -70,87 +68,71 @@
     }
 </script>
 
-<Col xl={4}>
-	<Card bind:class={hide}>
-		<CardBody>
+<div class="w-full xl:w-1/3 px-2 {hide ? 'hidden' : ''}">
+	<div class="mb-4 rounded-md bg-white shadow ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
+		<div class="p-4">
 			{#if isLoading}
-				<CardTitle class="mb-0">{"Loading..."} </CardTitle>
-				<p> Loading ... </p>
-			{:else}
-				<div class="row">
-					<div class="col-10">
-						<CardTitle class="mb-0">{conversationModel.title} </CardTitle>
-					</div>
-					<div class="col-2 ">
-						<button
-							class={`btn btn-rounded btn-sm btn-light`}
-							on:click={() => {
-								hide = 'hide';
-								unpinConversationFromDashboard(conversationModel.agent_id, conversationId);
-							}}
-						>
-							<i
-								class="mdi mdi-pin-off"
-								style="font-size: 12px;"
-								data-bs-toggle="tooltip"
-								data-bs-placement="top"
-								title="Unpin"
-							/>
-						</button>
-					</div>
+				<h4 class="mb-0 text-base font-medium">Loading...</h4>
+				<p class="text-muted">Loading ...</p>
+			{:else if conversationModel}
+				<div class="flex items-start gap-2">
+					<h4 class="mb-0 grow truncate text-base font-medium text-dark dark:text-gray-100">
+						{conversationModel.title}
+					</h4>
+					<button
+						type="button"
+						class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-light text-dark transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+						aria-label="Unpin"
+						title="Unpin"
+						onclick={() => {
+							hide = 'hide';
+							unpinConversationFromDashboard(conversationModel.agent_id, conversationId);
+						}}
+					>
+						<i class="mdi mdi-pin-off text-xs"></i>
+					</button>
 				</div>
-				<div class="card mb-2">
-					<div class="chat-head">
-						<div class="row chat-row">
-							<div class="col-md-0 col-7 chat-head-info">
-								<div class="chat-head-agent">
-									{#if agent?.icon_url}
-									<div class="line-align-center">
-										<img class="chat-head-agent-icon" src={agent.icon_url} alt="">
-									</div>
-									{/if}
-									<div class="chat-head-agent-name line-align-center ellipsis">{conversationModel.agent_id}</div>								
-								</div>
-							</div>
+
+				<div class="mt-3 rounded border border-gray-200 dark:border-gray-700">
+					<!-- Chat head -->
+					<div class="flex items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-700">
+						{#if agent?.icon_url}
+							<img class="h-6 w-6 rounded-full" src={agent.icon_url} alt="">
+						{/if}
+						<div class="truncate text-sm font-medium text-dark dark:text-gray-100">
+							{conversationModel.agent_id}
 						</div>
 					</div>
 
-					<div class={`chat-input-section css-animation fade-in-from-none mb-2`}>
-						<div class="row">
-							<div class="col-10">
-								<div class="position-relative">
-									<ChatTextArea
-										id={'dashboard-chat-textarea'}
-										className={`chat-input`}
-										maxLength={1024}
-										disabled={false}
-										bind:text={text}
-										bind:loadUtils={loadUtils}
-										bind:options={chatUtilOptions}
-										onFocus={e => chatUtilOptions = []}
-									>
-									</ChatTextArea>
-								</div>
-							</div>
-							<div class="col-auto">
-								<button
-									type="submit"
-									class={`btn btn-rounded chat-send waves-effect waves-light btn-primary`}
-									disabled={!!!(text)}
-									on:click={() => updateDashboardConversation({
-										conversation_id: conversationId,
-										name: '',
-										instruction: text
-									})}
-								>
-									<i class="mdi mdi-send" />
-								</button>
-							</div>
+					<!-- Input -->
+					<div class="flex items-end gap-2 p-2">
+						<div class="relative grow">
+							<ChatTextArea
+								id={'dashboard-chat-textarea'}
+								className={'chat-input'}
+								maxLength={1024}
+								disabled={false}
+								bind:text={text}
+								bind:loadUtils={loadUtils}
+								bind:options={chatUtilOptions}
+								onFocus={() => chatUtilOptions = []}
+							/>
 						</div>
+						<button
+							type="submit"
+							class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+							disabled={!text}
+							onclick={() => updateDashboardConversation({
+								conversation_id: conversationId,
+								name: '',
+								instruction: text
+							})}
+						>
+							<i class="mdi mdi-send"></i>
+						</button>
 					</div>
 				</div>
 			{/if}
-		
-		</CardBody>
-	</Card>
-</Col>
+		</div>
+	</div>
+</div>

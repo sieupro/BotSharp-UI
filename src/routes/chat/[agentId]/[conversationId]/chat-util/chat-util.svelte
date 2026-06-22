@@ -1,47 +1,48 @@
 <script>
-	import { createEventDispatcher } from "svelte";
-
-    const svelteDispatch = createEventDispatcher();
-
-    /** @type {boolean} */
-    export let disableDefaultStyles = false;
-
-    /** @type {string} */
-    export let containerClasses = "";
-
-    /** @type {string} */
-    export let containerStyles = "";
-
-    /** @type {boolean} */
-    export let disabled = false;
-
+    /**
+     * @type {{
+     *   disableDefaultStyles?: boolean,
+     *   containerClasses?: string,
+     *   containerStyles?: string,
+     *   disabled?: boolean,
+     *   onclick?: () => void
+     * }}
+     */
+    let {
+        disableDefaultStyles = false,
+        containerClasses = '',
+        containerStyles = '',
+        disabled = false,
+        onclick
+    } = $props();
 
     function clickIcon() {
         if (disabled) {
             return;
         }
-        svelteDispatch("click")
+        onclick?.();
     }
 </script>
 
 
 <div
-    class={`${disableDefaultStyles ? '' : 'chat-util-trigger'} ${containerClasses}`}
+    class={`${disableDefaultStyles ? '' : 'cu-trigger'} ${containerClasses}`}
     style={`${containerStyles}`}
 >
-    <ul class="list-inline mb-0">
-        <li class="list-inline-item">
-            <span>
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <ul class="cu-list">
+        <li class="cu-item">
+            <span class="cu-glyph">
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <i
-                    class="bx bx-plus-circle clickable"
+                    class="bx bx-plus-circle cu-icon"
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                     title="More"
-                    on:click={() => clickIcon()}
-                />
+                    onclick={() => clickIcon()}
+                ></i>
             </span>
         </li>
     </ul>
 </div>
+

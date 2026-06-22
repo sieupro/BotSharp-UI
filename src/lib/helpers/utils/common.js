@@ -1,11 +1,26 @@
 import { goto } from '$app/navigation';
 import moment from 'moment';
-import { TIME_RANGE_OPTIONS } from '../constants';
+import { TIME_RANGE_OPTIONS, CUSTOM_DATE_RANGE } from '../constants';
 import { TimeRange } from '../enums';
 
 export function range(size = 3, startAt = 0) {
     return [...Array(size).keys()].map((i) => i + startAt);
 };
+
+/**
+ * Format an integer using the user's locale digit-grouping rules (e.g.,
+ * 1234567 → "1,234,567" in en-US, "1.234.567" in de-DE).
+ * Falls back to an empty string when the value is null/undefined/NaN.
+ *
+ * @param {number | null | undefined} value
+ * @returns {string}
+ */
+export function formatNumber(value) {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return '';
+    }
+    return new Intl.NumberFormat().format(value);
+}
 
 export const durationUnitRegex = /[a-zA-Z]/;
 
@@ -120,18 +135,19 @@ export function getPagingQueryParams(args, defaults = { defaultPageSize: 12, max
 /**
  * @param {URL} url
  * @param {import('$commonTypes').KeyValuePair[]} pairs
- * @param {() => void} [callback]
+ * @param {(args0: URL) => void} [callback]
  */
 export function setUrlQueryParams(url, pairs, callback) {
     if (!pairs?.length) {
         return;
     }
 
+    url.search = '';
     pairs?.map(p => {
         url.searchParams.set(p.key, p.value);
     });
     
-    callback?.();
+    callback?.(url);
 }
 
 /**
@@ -144,12 +160,28 @@ export function goToUrl(url, opts = {}) {
 }
 
 /**
- * @param {string} str
+ * @param {HTMLElement | null | undefined} container
+ * @param {ScrollBehavior} behavior
  */
-export function splitTextByCase(str) {
+export function scrollToBottom(container, behavior = 'smooth') {
+    if (container) {
+        setTimeout(() => {
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: behavior
+            });
+        }, 0);
+    }
+}
+
+/**
+ * @param {string} str
+ * @param {string} separator
+ */
+export function splitTextByCase(str, separator = '_') {
     if (!str) return str;
 
-    let words = str.split("_");
+    let words = str.split(separator);
     if (words.length === 1) {
         // split by camel case
         words = str.split(/(?=[A-Z])/);
@@ -161,13 +193,43 @@ export function splitTextByCase(str) {
 }
 
 /**
+ * @param {string} url
+ */
+export function getCleanUrl(url) {
+    if (!url) return url;
+
+    if (url.startsWith('/')) {
+        url = url.substring(1);
+    }
+
+    return url;
+}
+
+/**
  * @param {string} timeRange
+ * @param {string} [startDate] - When timeRange is "Custom date", start date in YYYY-MM-DD format (e.g. 2026-01-25)
+ * @param {string} [endDate] - When timeRange is "Custom date", end date in YYYY-MM-DD format (e.g. 2026-01-30). If not provided, uses startDate
  * @returns {{ startTime: string | null, endTime: string | null }}
  */
-export function convertTimeRange(timeRange) {
+export function convertTimeRange(timeRange, startDate, endDate) {
     let ret = { startTime: null, endTime: null };
 
     if (!timeRange) {
+        return ret;
+    }
+
+    // Handle CUSTOM_DATE_RANGE first, as it's not in TIME_RANGE_OPTIONS
+    if (timeRange === CUSTOM_DATE_RANGE) {
+        if (startDate && moment(startDate).isValid()) {
+            const endDateToUse = endDate && moment(endDate).isValid() ? endDate : startDate;
+            ret = {
+                ...ret,
+                // @ts-ignore
+                startTime: moment(startDate).startOf('day').utc().format(),
+                // @ts-ignore
+                endTime: moment(endDateToUse).endOf('day').utc().format()
+            };
+        }
         return ret;
     }
 

@@ -1,29 +1,31 @@
 <script>
+    import { onDestroy } from 'svelte';
+    import { fade } from 'svelte/transition';
     import 'overlayscrollbars/overlayscrollbars.css';
     import { OverlayScrollbars } from 'overlayscrollbars';
-	import { afterUpdate, onDestroy } from 'svelte';
-    import { fade } from 'svelte/transition';
 	import MessageStateLogElement from './message-state-log-element.svelte';
 	import AgentQueueLogElement from './agent-queue-log-element.svelte';
 	import ChatAgentInfo from '../agent-info/chat-agent-info.svelte';
 	import LatestStateLog from './latest-state-log.svelte';
 
-    /** @type {import('$agentTypes').AgentModel} */
-	export let agent;
+    /**
+     * @type {{
+     *   agent: import('$agentTypes').AgentModel,
+     *   msgStateLogs?: any[],
+     *   agentQueueLogs?: any[],
+     *   latestStateLog?: Object | null,
+     *   closeWindow: () => void
+     * }}
+     */
+    let {
+        agent,
+        msgStateLogs = $bindable([]),
+        agentQueueLogs = $bindable([]),
+        latestStateLog = null,
+        closeWindow
+    } = $props();
 
     /** @type {any[]} */
-    export let msgStateLogs = [];
-
-    /** @type {any[]} */
-    export let agentQueueLogs = [];
-
-    /** @type {Object?} */
-    export let latestStateLog = null;
-
-    /** @type {() => void} */
-    export let closeWindow;
-
-    /** @type {any} */
     let scrollbars = [];
 
     const msgStateLogTab = 1;
@@ -44,35 +46,51 @@
 		}
 	};
 
-    afterUpdate(() => {
-        refresh();
+    $effect(() => {
+        // Track reactive dependencies to re-run on changes
+        msgStateLogs;
+        agentQueueLogs;
+        latestStateLog;
+
+        initScrollbars();
+        scrollToBottom();
     });
 
     onDestroy(() => {
         cleanLogs();
     });
 
-    function refresh() {
-        scrollToBottom();
-    }
-
-    function scrollToBottom() {
+    function initScrollbars() {
         const scrollbarElements = [
+            document.querySelector('.instant-log-scrollbar'),
             document.querySelector('.latest-state-log-scrollbar'),
             document.querySelector('.msg-state-log-scrollbar'),
             document.querySelector('.agent-queue-log-scrollbar')
         ].filter(Boolean);
         scrollbarElements.forEach(elem => {
             // @ts-ignore
+            if (elem.hasAttribute('data-overlayscrollbars')) {
+                return;
+            }
+            // @ts-ignore
             scrollbars = [ ...scrollbars, OverlayScrollbars(elem, options) ];
         });
+    }
 
-        // @ts-ignore
-        scrollbars.forEach(scrollbar => {
+    let _scrollScheduled = false;
+    function scrollToBottom() {
+        if (_scrollScheduled) {
+            return;
+        }
+        _scrollScheduled = true;
+        requestAnimationFrame(() => {
             setTimeout(() => {
-                const { viewport } = scrollbar.elements();
-                viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
-            }, 200);
+                scrollbars.forEach(scrollbar => {
+                    const { viewport } = scrollbar.elements();
+                    viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+                });
+                _scrollScheduled = false;
+            }, 150);
         });
     }
 
@@ -94,26 +112,27 @@
     }
 </script>
 
-<div class="chat-log">
-    <div class="card mb-0 log-background log-flex">
-        <div class="log-close-btn padding-side log-header">
+<div class="il-root font-code">
+    <div class="il-card">
+        <div class="il-close-bar">
             <div>
                 <button
                     type="button"
-                    class="btn btn-sm btn-secondary btn-rounded chat-send waves-effect waves-light"
-                    on:click={() => closeWindow()}
+                    class="il-close-btn"
+                    aria-label="Close log window"
+                    onclick={() => closeWindow()}
                 >
                     <i class="mdi mdi-window-close"></i>
                 </button>
             </div>
         </div>
-        <div class="log-body instant-log-body">
+        <div class="il-body instant-log-scrollbar">
             {#if !!agent}
             <div
-                class="log-list instant-log-section"
+                class="il-section il-section-agent"
                 transition:fade={{ duration: duration }}
             >
-                <div class="chat-agent-info padding-side">
+                <div class="il-agent-info">
                     <ChatAgentInfo agent={agent} />
                 </div>
             </div>
@@ -121,23 +140,22 @@
 
             {#if !!agentQueueLogs && agentQueueLogs?.length > 0}
             <div
-                class="log-list instant-log-section instant-log-sec-sm"
+                class="il-section il-section-sm"
                 in:fade={{ duration: inDuration }}
                 out:fade={{ duration: outDuration }}
             >
-                <div class="close-icon">
-                    <span
-                        style="float: right;"
-                        role="link"
-                        tabindex="-1"
-                        on:keydown={() => {}}
-                        on:click={() => closeLog(agentQueueLogTab)}
+                <div class="il-section-close">
+                    <button
+                        type="button"
+                        class="il-section-close-btn"
+                        aria-label="Close agent queue log"
+                        onclick={() => closeLog(agentQueueLogTab)}
                     >
                         <i class="mdi mdi-window-close"></i>
-                    </span>
+                    </button>
                 </div>
-                <div class="agent-queue-log-scrollbar padding-side">
-                    <ul>
+                <div class="il-scroll agent-queue-log-scrollbar">
+                    <ul class="il-list">
                         {#each agentQueueLogs as log (log.uid)}
                             <AgentQueueLogElement data={log} />
                         {/each}
@@ -148,23 +166,22 @@
 
             {#if !!msgStateLogs && msgStateLogs?.length > 0}
             <div
-                class="log-list instant-log-section instant-log-sec-lg"
+                class="il-section il-section-lg"
                 in:fade={{ duration: inDuration }}
                 out:fade={{ duration: outDuration }}
             >
-                <div class="close-icon">
-                    <span
-                        style="float: right;"
-                        role="link"
-                        tabindex="-1"
-                        on:keydown={() => {}}
-                        on:click={() => closeLog(msgStateLogTab)}
+                <div class="il-section-close">
+                    <button
+                        type="button"
+                        class="il-section-close-btn"
+                        aria-label="Close message state log"
+                        onclick={() => closeLog(msgStateLogTab)}
                     >
                         <i class="mdi mdi-window-close"></i>
-                    </span>
+                    </button>
                 </div>
-                <div class="msg-state-log-scrollbar padding-side" >
-                    <ul>
+                <div class="il-scroll msg-state-log-scrollbar">
+                    <ul class="il-list">
                         {#each msgStateLogs as log (log.uid)}
                             <MessageStateLogElement data={log} />
                         {/each}
@@ -174,11 +191,11 @@
             {/if}
             {#if latestStateLog && Object.keys(latestStateLog)?.length > 0}
             <div
-                class="log-list instant-log-section instant-log-sec-md"
+                class="il-section il-section-md"
                 in:fade={{ duration: inDuration }}
                 out:fade={{ duration: outDuration }}
             >
-                <div class="latest-state-log-scrollbar latest-state-log">
+                <div class="il-latest-scroll latest-state-log-scrollbar">
                     <div>
                         <LatestStateLog data={latestStateLog} />
                     </div>
@@ -186,7 +203,9 @@
             </div>
             {/if}
         </div>
-        
-        <div class="log-footer"></div>
+
+        <div class="il-footer"></div>
     </div>
 </div>
+
+

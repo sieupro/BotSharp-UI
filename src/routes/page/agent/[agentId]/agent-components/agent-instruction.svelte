@@ -1,21 +1,24 @@
 <script>
     import { onMount } from 'svelte';
-    import { _ } from 'svelte-i18n';
     import { v4 as uuidv4 } from 'uuid';
     import util from "lodash";
-    import { Card, CardBody, FormGroup, Input, CardHeader } from '@sveltestrap/sveltestrap';
     import NavBar from '$lib/common/nav-bar/NavBar.svelte';
-	import NavItem from '$lib/common/nav-bar/NavItem.svelte';
+    import NavItem from '$lib/common/nav-bar/NavItem.svelte';
 
     const defaultChannel = "default";
-    
-    /** @type {import('$agentTypes').AgentModel} */
-    export let agent;
 
-    /** @type {() => void} */
-    export let handleAgentChange = () => {};
+    /**
+     * @type {{
+     *   agent: import('$agentTypes').AgentModel,
+     *   handleAgentChange?: () => void
+     * }}
+     */
+    let {
+        agent = $bindable(),
+        handleAgentChange = () => {}
+    } = $props();
 
-    export const fetchInstructions = () => {
+    export function fetchInstructions() {
         const candidates = inner_instructions?.filter((x, idx) => idx > 0 && !!x.channel?.trim())?.map(x => {
             return { channel: x.channel.trim().toLowerCase(), instruction: x.instruction };
         });
@@ -34,8 +37,9 @@
         };
     }
 
-    export const refresh = () => init();
-
+    export function refresh() {
+        init();
+    }
 
     /** @type {import('$agentTypes').ChannelInstruction} */
     const defaultInstruction = {
@@ -44,10 +48,10 @@
     };
 
     /** @type {import('$agentTypes').ChannelInstruction[]} */
-    let inner_instructions = [];
+    let inner_instructions = $state([]);
 
     /** @type {import('$agentTypes').ChannelInstruction} */
-    let selected_instruction = { ...defaultInstruction };
+    let selected_instruction = $state({ ...defaultInstruction });
 
     onMount(() => {
         init();
@@ -87,6 +91,22 @@
         handleAgentChange();
     }
 
+    /** @param {any} e */
+    function onKeyDown(e) {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+
+            if (e.target) {
+                const start = e.target.selectionStart || 0;
+                const end = e.target.selectionEnd || 0;
+                const value = e.target.value || '';
+                e.target.value = value.substring(0, start) + "\t" + value.substring(end);
+                e.target.selectionStart = start + 1;
+                e.target.selectionEnd = start + 1;
+            }
+        }
+    }
+
     function addChannel() {
         inner_instructions = [
             ...inner_instructions,
@@ -111,55 +131,46 @@
     }
 </script>
 
-<Card class="agent-prompt-container">
-    <CardHeader class="agent-prompt-header border-bottom">
-        <div class="d-flex">
-            <div class="flex-grow-1">
-                <h5 class="fw-semibold">{agent.name}</h5>
+<div class="ai-card">
+    <div class="ai-card-header">
+        <h5 class="ai-agent-name">{agent.name}</h5>
+    </div>
+    <div class="ai-card-body">
+        <div class="ai-section">
+            <div class="ai-section-label">
+                {'Description:'}
             </div>
-        </div>
-    </CardHeader>
-    <CardBody>
-        <FormGroup>
-            <div class="mb-2">
-                <div class="line-align-center fw-bold">
-                    {'Description:'}
-                </div>
-            </div>
-            <Input
-                type="textarea"
-                class="form-control"
-                style="scrollbar-width: thin; resize: none;"
+            <textarea
+                class="ai-textarea ai-textarea-sm"
                 rows={4}
                 bind:value={agent.description}
                 placeholder="Enter your Message"
-                on:input={handleAgentChange}
-            />
-        </FormGroup>
+                oninput={() => handleAgentChange()}
+            ></textarea>
+        </div>
 
-        <FormGroup class="agent-prompt-body">
-            <div class="mb-2" style="display: flex; gap: 10px;">
-                <div class="line-align-center fw-bold">
+        <div class="ai-section">
+            <div class="ai-section-header">
+                <div class="ai-section-label">
                     {#if inner_instructions.length > 1}
                         {'Instructions:'}
                     {:else}
                         {'System instruction:'}
                     {/if}
                 </div>
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
-                    class="text-primary clickable"
+                    class="ai-add-btn"
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                     title="Add channel instruction"
-                    style="font-size: 16px;"
-                    on:click={() => addChannel()}
+                    onclick={() => addChannel()}
                 >
-                    <i class="mdi mdi-plus-circle-outline" />
+                    <i class="mdi mdi-plus-circle-outline"></i>
                 </div>
             </div>
-            
+
             {#if inner_instructions.length > 1}
             <NavBar
                 id={'agent-instruction-container'}
@@ -186,15 +197,15 @@
                 {/each}
             </NavBar>
             {/if}
-            <Input
-                type="textarea"
-                class="form-control"
-                style="scrollbar-width: thin; resize: none;"
+            <textarea
+                class="ai-textarea"
                 value={selected_instruction.instruction}
                 rows={20}
-                on:input={(e) => changePrompt(e)}
+                oninput={(e) => changePrompt(e)}
+                onkeydown={(e) => onKeyDown(e)}
                 placeholder="Enter your instruction"
-            />
-        </FormGroup>
-    </CardBody>
-</Card>
+            ></textarea>
+        </div>
+    </div>
+</div>
+

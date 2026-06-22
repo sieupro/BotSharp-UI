@@ -1,10 +1,10 @@
 <script>
-	import CustomAnchor from './CustomAnchor.svelte';
 	import { Node, Anchor } from 'svelvet';
 	import { generateInput, generateOutput } from 'svelvet';
+	import CustomAnchor from './CustomAnchor.svelte';
 
-	/** @type {import('$agentTypes').AgentModel} */
-	export let agent;
+	/** @type {{ agent: import('$agentTypes').AgentModel }} */
+	let { agent } = $props();
 
     /** 
      * @typedef {Object} Inputs 
@@ -17,7 +17,7 @@
 		strokeWidth: 2,
 		noise: 1
 	};
-	const processor = (inputs) => inputs;
+	const processor = (/** @type {any} */ inputs) => inputs;
 	const inputs = generateInput(initialData);
 	const output = generateOutput(inputs, processor);
 </script>
@@ -39,28 +39,4 @@
 	</div>
 </Node>
 
-<style>
-	.node {
-		box-sizing: border-box;
-		width: 400px;
-		height: 400px;
-		border-radius: 8px;
-		position: relative;
-		pointer-events: auto;
-		display: flex;
-		flex-direction: column;
-		padding: 10px;
-		gap: 10px;
-	}
 
-	.selected {
-		border: solid 2px white;
-	}
-	.input-anchors {
-		position: absolute;
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		left: -24px;
-	}
-</style>

@@ -1,20 +1,28 @@
 <script>
 	import { Svelvet, ThemeToggle, Group } from 'svelvet';
+	import { page } from '$app/state';
+	import { getAgent } from '$lib/services/agent-service.js';
 	import Thickness from './components/Thickness.svelte';
 	import AzureOpenAI from './components/LlmProviders/AzureOpenAI.svelte';
 	import Agent from './components/Agent.svelte';
-	import { page } from '$app/stores';
-	import { getAgent } from '$lib/services/agent-service.js';
-	import { onMount } from 'svelte';
 
+	/** @type {number} */
 	let zoom = 0.8;
-	const params = $page.params;
 
-    /** @type {import('$agentTypes').AgentModel} */
-    let agent;	
-	onMount(async () => {
-		agent = await getAgent(params.agentId);
+	/** @type {import('$agentTypes').AgentModel} */
+	let agent = $state(/** @type {any} */ (undefined));
+
+	let agentId = $derived(page.params.agentId);
+
+	$effect(() => {
+		if (agentId) {
+			loadAgent(agentId);
+		}
 	});
+
+	async function loadAgent(/** @type {string} */ id) {
+		agent = await getAgent(id);
+	}
 </script>
 
 <div id="svelet-agent-build">
@@ -23,7 +31,7 @@
 			position={{ x: -100, y: -25 }}
 			width={600}
 			height={700}
-			color="var(--bs-primary)"
+			color="#556ee6"
 			groupName="parameters"
 		>
 			<Thickness />
@@ -39,27 +47,4 @@
 	</Svelvet>
 </div>
 
-<style>
-	@import url('https://fonts.googleapis.com/css2?family=Reenie+Beanie&display=swap');
-    #svelet-agent-build {
-        height: 80vh;
-        width: "100%";
-    }
-	.note {
-		font-family: 'Reenie Beanie', sans-serif;
-		position: absolute;
-		color: inherit;
-		width: 400px;
-		transform: rotate(-3deg);
-		font-weight: 200px;
-		font-size: 40px;
-	}
-	#state {
-		top: -30px;
-		left: 620px;
-	}
-	#groups {
-		top: 530px;
-		left: 490px;
-	}
-</style>
+

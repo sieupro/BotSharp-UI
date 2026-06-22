@@ -1,17 +1,127 @@
 import axios from 'axios';
-import { getUserStore, globalErrorStore, loaderStore } from '$lib/helpers/store.js';
+import { getUserStore, globalErrorStore, loaderStore, userStore, getTenantId } from '$lib/helpers/store.js';
+import { renewToken } from '$lib/services/auth-service';
+import { delay } from './utils/common';
+
+
+const retryQueue = {
+    /** @type {{config: import('axios').InternalAxiosRequestConfig, resolve: (value: any) => void, reject: (reason?: any) => void}[]} */
+    queue: [],
+
+    /** @type {boolean} */
+    isRefreshingToken: false,
+
+    /** @type {number} */
+    timeout: 200,
+
+    /** @type {number} */
+    maxRenewTokenCount: 30,
+
+    /**
+     * refresh access token
+     * @param {string} token
+     * @returns {Promise<string>}
+     */
+    refreshAccessToken(token) {
+        return new Promise((resolve, reject) => {
+            renewToken(token, (newToken) => resolve(newToken), () => reject(new Error('Failed to refresh token')));
+        });
+    },
+
+    /** @param {{config: import('axios').InternalAxiosRequestConfig, resolve: (value: any) => void, reject: (reason?: any) => void}} item */
+    enqueue(item) {
+        this.queue.push(item);
+        console.log('queue', this.queue.length);
+        if (!this.isRefreshingToken) {
+            const user = getUserStore();
+            if (!isTokenExired(user.expires)) {
+                this.dequeue(user.token);
+            } else {
+                this.isRefreshingToken = true;
+                user.renew_token_count = (user.renew_token_count || 0) + 1;
+                // @ts-ignore
+                userStore.set(user);
+                this.refreshAccessToken(user?.token || '')
+                    .then((newToken) => {
+                        this.isRefreshingToken = false;
+                        const promise = this.dequeue(newToken);
+                        return promise;
+                    })
+                    .catch((err) => {
+                        this.isRefreshingToken = false;
+                        // Reject all queued requests
+                        while (this.queue.length > 0) {
+                            const item = this.queue.shift();
+                            if (item) {
+                                item.reject(err);
+                            }
+                        }
+                        redirectToLogin();
+                    });
+            }
+        }
+    },
+
+    /**
+     * @param {string} newToken
+     * @returns {Promise<void>}
+     */
+    dequeue(newToken) {
+        let chain = Promise.resolve();
+        while (this.queue.length > 0) {
+            const item = this.queue.shift();
+            if (!item?.config) {
+                continue;
+            }
+
+            const { config } = item;
+            // @ts-ignore
+            config.headers = config.headers || {};
+            // @ts-ignore
+            config.headers.Authorization = `Bearer ${newToken}`;
+                        const tenantId = getTenantId();
+            if (tenantId) {
+                // @ts-ignore
+                config.headers['__tenant'] = tenantId;
+            }
+
+            chain = chain.then(() => delay(this.timeout))
+                         .then(() => {
+                            return new Promise((resolve) => {
+                                axios(config).then((response) => {
+                                    resolve();
+                                    item.resolve(response);
+                                }).catch((err) => {
+                                    resolve();
+                                    item.reject(err);
+                                });
+                            });
+                         });
+        }
+        return chain;
+    }
+};
 
 // Add a request interceptor to attach authentication tokens or headers
 axios.interceptors.request.use(
     (config) => {
         // Add your authentication logic here
         const user = getUserStore();
+        const tenantId = getTenantId();
         if (!skipLoader(config)) {
             loaderStore.set(true);
         }
-        // For example, attach an authentication token to the request headers
-        if (user.token)
+        // Attach an authentication token to the request headers
+        if (user.token) {
             config.headers.Authorization = `Bearer ${user.token}`;
+            
+            if (tenantId) {
+                config.headers['__tenant'] = tenantId;
+            }
+        } else {
+            retryQueue.queue = [];
+            redirectToLogin();
+        }
         return config;
     },
     (error) => {
@@ -23,26 +133,30 @@ axios.interceptors.request.use(
 // Add a response interceptor to handle 401 errors globally
 axios.interceptors.response.use(
     (response) => {
-        // If the request was successful, return the response
         loaderStore.set(false);
-        const user = getUserStore();
-
-        const isExpired = Date.now() / 1000 > user.expires;
-        if (isExpired) {
-            redirectToLogin();
-            return Promise.reject('user token expired!');
-        }
         return response;
     },
     (error) => {
         loaderStore.set(false);
+        const originalRequest = error?.config || {};
         const user = getUserStore();
-        
-        const isExpired = Date.now() / 1000 > user.expires;
-        if (isExpired || (error.response && error.response.status === 401)) {
+
+        if (!user?.token || user.renew_token_count >= retryQueue.maxRenewTokenCount) {
+            retryQueue.queue = [];
             redirectToLogin();
             return Promise.reject(error);
-        } else if (!skipGlobalError(error.config)) {
+        }
+
+        // If token expired or 401 returned, attempt a single token refresh and retry requests in queue.
+        if ((error?.response?.status === 401 || isTokenExired(user.expires))
+            && originalRequest
+            && !originalRequest._retried
+            && !originalRequest.url.includes('renew-token')) {
+            originalRequest._retried = true;
+            return new Promise((resolve, reject) => {
+                retryQueue.enqueue({ config: originalRequest, resolve, reject });
+            });
+        } else if (!skipGlobalError(originalRequest)) {
             globalErrorStore.set(true);
             setTimeout(() => {
                 globalErrorStore.set(false);
@@ -54,6 +168,12 @@ axios.interceptors.response.use(
     }
 );
 
+/**
+ * @param {number} expires
+ */
+function isTokenExired(expires) {
+    return Date.now() / 1000 > expires;
+}
 
 function redirectToLogin() {
     const curUrl = window.location.pathname + window.location.search;
@@ -70,17 +190,22 @@ function skipLoader(config) {
     const postRegexes = [
         new RegExp('http(s*)://(.*?)/conversation/(.*?)/(.*?)', 'g'),
         new RegExp('http(s*)://(.*?)/agent', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/page', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/(.*?)/search', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/create', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/document/(.*?)/page', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data/page', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/query', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/file/page', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/file/upload', 'g'),
+        // new RegExp('http(s*)://(.*?)/knowledge/entity/analyze', 'g'),
         new RegExp('http(s*)://(.*?)/users', 'g'),
-        new RegExp('http(s*)://(.*?)/instruct/chat-completion', 'g')
+        new RegExp('http(s*)://(.*?)/instruct/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/agent/(.*?)/code-scripts', 'g'),
+        new RegExp('http(s*)://(.*?)/agent/(.*?)/code-script/generate', 'g'),
+        new RegExp('http(s*)://(.*?)/renew-token', 'g')
     ];
 
     /** @type {RegExp[]} */
     const putRegexes = [
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/update', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data', 'g'),
         new RegExp('http(s*)://(.*?)/conversation/(.*?)/update-message', 'g'),
         new RegExp('http(s*)://(.*?)/conversation/(.*?)/update-tags', 'g'),
         new RegExp('http(s*)://(.*?)/users', 'g'),
@@ -88,26 +213,39 @@ function skipLoader(config) {
 
     /** @type {RegExp[]} */
     const deleteRegexes = [
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/delete-collection', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/data/(.*?)', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/data', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data', 'g'),
+        new RegExp('http(s*)://(.*?)/conversation/(.*?)/message/(.*?)', 'g')
     ];
 
     /** @type {RegExp[]} */
     const getRegexes = [
-        new RegExp('http(s*)://(.*?)/setting/(.*?)', 'g'),
-        new RegExp('http(s*)://(.*?)/user/me', 'g'),
         new RegExp('http(s*)://(.*?)/plugin/menu', 'g'),
-        new RegExp('http(s*)://(.*?)/address/options(.*?)', 'g'),
-        new RegExp('http(s*)://(.*?)/conversation/(.*?)/files/(.*?)', 'g'),
-        new RegExp('http(s*)://(.*?)/llm-provider/(.*?)/models', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/collections', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/exist', 'g'),
+        new RegExp('http(s*)://(.*?)/setting/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/roles', 'g'),
         new RegExp('http(s*)://(.*?)/role/options', 'g'),
         new RegExp('http(s*)://(.*?)/role/(.*?)/details', 'g'),
         new RegExp('http(s*)://(.*?)/user/(.*?)/details', 'g'),
+        new RegExp('http(s*)://(.*?)/user/me', 'g'),
+        new RegExp('http(s*)://(.*?)/address/options(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/agents', 'g'),
+        new RegExp('http(s*)://(.*?)/agent/options', 'g'),
         new RegExp('http(s*)://(.*?)/agent/labels', 'g'),
+        new RegExp('http(s*)://(.*?)/agent/tasks', 'g'),
+        new RegExp('http(s*)://(.*?)/agent/(.*?)/code-scripts', 'g'),
+        new RegExp('http(s*)://(.*?)/rule/triggers', 'g'),
         new RegExp('http(s*)://(.*?)/conversation/state/keys', 'g'),
+        new RegExp('http(s*)://(.*?)/conversation/(.*?)/files/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/llm-configs', 'g'),
+        new RegExp('http(s*)://(.*?)/llm-provider/(.*?)/models', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collections', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/exist', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/details', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/processors', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/entity/analyzers', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/entity/data-providers', 'g'),
+        new RegExp('http(s*)://(.*?)/logger/instruction/log', 'g'),
         new RegExp('http(s*)://(.*?)/logger/instruction/log/keys', 'g'),
         new RegExp('http(s*)://(.*?)/logger/conversation/(.*?)/content-log', 'g'),
         new RegExp('http(s*)://(.*?)/logger/conversation/(.*?)/state-log', 'g'),
@@ -137,32 +275,35 @@ function skipLoader(config) {
 function skipGlobalError(config) {
     /** @type {RegExp[]} */
     const postRegexes = [
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/page', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/(.*?)/search', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/create', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/document/(.*?)/page', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/create-collection', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data/page', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/query', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/file/page', 'g'),
         new RegExp('http(s*)://(.*?)/refresh-agents', 'g')
     ];
 
     /** @type {RegExp[]} */
     const putRegexes = [
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/update', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data', 'g'),
         new RegExp('http(s*)://(.*?)/role', 'g'),
         new RegExp('http(s*)://(.*?)/user', 'g'),
         new RegExp('http(s*)://(.*?)/conversation/(.*?)/update-message', 'g'),
         new RegExp('http(s*)://(.*?)/conversation/(.*?)/update-tags', 'g')
     ];
-    
+
     /** @type {RegExp[]} */
     const deleteRegexes = [
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/delete-collection', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/data/(.*?)', 'g'),
-        new RegExp('http(s*)://(.*?)/knowledge/vector/(.*?)/data', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data/(.*?)', 'g'),
+        new RegExp('http(s*)://(.*?)/knowledge/collection/(.*?)/data', 'g'),
     ];
 
     /** @type {RegExp[]} */
-    const getRegexes = [];
+    const getRegexes = [
+        new RegExp('http(s*)://(.*?)/agents', 'g')
+    ];
 
     if (config.method === 'post' && postRegexes.some(regex => regex.test(config.url || ''))) {
         return true;
@@ -199,7 +340,7 @@ export function replaceUrl(url, args) {
 
 /**
  * Replace new line as <br>
- * @param {string} text 
+ * @param {string} text
  * @returns string
  */
 export function replaceNewLine(text) {
@@ -208,11 +349,11 @@ export function replaceNewLine(text) {
 
 /**
  * Replace unnecessary markdown
- * @param {string} text 
+ * @param {string} text
  * @returns {string}
  */
 export function replaceMarkdown(text) {
-    let res = text.replace(/#([\s]+)/g, '\\# ').replace(/[-|=]{3,}/g, '@@@');
+    let res = text.replace(/#([\s]+)/g, '\\# ').replace(/^-[ \t]+/gm, '• ').replace(/[-|=]{3,}/g, '•••');
 
     let regex1 = new RegExp('\\*(.*)\\*', 'g');
     let regex2 = new RegExp('\\*([\\*]+)\\*', 'g');

@@ -1,22 +1,25 @@
 <script>
     import { getContext, onMount } from "svelte";
     import { fade } from 'svelte/transition';
-	import { Card, CardBody } from "@sveltestrap/sveltestrap";
 	import { ElementType } from "$lib/helpers/enums";
-    
-    /** @type {boolean} */
-    export let disabled = false;
+
+    /**
+     * @type {{
+     *   disabled?: boolean,
+     *   options?: any[],
+     *   onConfirm?: (args0: string, args1: string) => any
+     * }}
+     */
+    let {
+        disabled = false,
+        options = [],
+        onConfirm
+    } = $props();
 
     /** @type {any[]} */
-    export let options = [];
-
-    /** @type {(args0: string, args1: string) => any} */
-    export let onConfirm;
-
+    let cards = $state([]);
     /** @type {any[]} */
-    let cards = [];
-    /** @type {any[]} */
-    let buttons = [];
+    let buttons = $state([]);
 
     const duration = 1000;
 
@@ -52,7 +55,7 @@
             };
         }) || [];
 
-        buttons = options?.filter(op => !!!op.title && !!!op.subtitle)?.flatMap(op => {
+        buttons = options?.filter(op => !op.title && !op.subtitle)?.flatMap(op => {
             // @ts-ignore
             return op.buttons?.filter(x => !!x.title)?.map(x => {
                 return {
@@ -97,58 +100,57 @@
 </script>
 
 {#if cards}
-    <div class="complex-option-container">
+    <div class="rcco-grid">
         {#each cards as card, idx (idx)}
-            <div class="card-element" in:fade={{ duration: duration }}>
-                <Card>
-                    <CardBody class="card-element-body">
-                        {#if !!card.title}
-                            <div class="card-element-title hide-text">{card.title}</div>
-                        {/if}
-                        {#if !!card.image_url}
-                            <div class="avatar-md">
-                                <span class="avatar-title rounded-circle bg-light text-danger font-size-16">
-                                    <img src={card.image_url} alt="" height="60" class="rounded-circle">
-                                </span>
-                            </div>
-                        {/if}
-                        {#if !!card.subtitle}
-                            <div class="card-element-subtitle hide-text">{@html card.subtitle}</div>
-                        {/if}
-                        {#if !!card.text}
-                            <div class="card-element-text hide-text">{card.text}</div>
-                        {/if}
-                        {#if card.options?.length > 0}
-                            <div class="card-option-group">
-                                {#each card.options as option, i (i)}
-                                    <button
-                                        class={`btn btn-sm m-1 ${option.is_secondary ? 'btn-outline-secondary': 'btn-outline-primary'}`}
-                                        disabled={disabled}
-                                        on:click={(e) => handleClickOption(e, option)}
-                                    >
-                                        <span class={`${option.type === ElementType.Web && option.url ? 'link-option' : ''}`}>{option.title}</span>
-                                    </button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </CardBody>
-                </Card>
+            <div class="rcco-card" in:fade={{ duration: duration }}>
+                <div class="rcco-card-body">
+                    {#if !!card.title}
+                        <div class="rcco-title rcco-clip">{card.title}</div>
+                    {/if}
+                    {#if !!card.image_url}
+                        <div class="rcco-avatar">
+                            <span class="rcco-avatar-frame">
+                                <img src={card.image_url} alt="" height="60" class="rcco-avatar-img">
+                            </span>
+                        </div>
+                    {/if}
+                    {#if !!card.subtitle}
+                        <div class="rcco-subtitle rcco-clip">{@html card.subtitle}</div>
+                    {/if}
+                    {#if !!card.text}
+                        <div class="rcco-text rcco-clip">{card.text}</div>
+                    {/if}
+                    {#if card.options?.length > 0}
+                        <div class="rcco-option-group">
+                            {#each card.options as option, i (i)}
+                                <button
+                                    class={`rcco-btn ${option.is_secondary ? 'rcco-btn-secondary' : 'rcco-btn-primary'}`}
+                                    disabled={disabled}
+                                    onclick={(e) => handleClickOption(e, option)}
+                                >
+                                    <span class={`${option.type === ElementType.Web && option.url ? 'rcco-link' : ''}`}>{option.title}</span>
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
             </div>
         {/each}
     </div>
 {/if}
 
 {#if buttons}
-    <div class="plain-option-container center-option" style="margin-top: 5px;">
-        {#each buttons as option, index}
+    <div class="rcco-button-row">
+        {#each buttons as option, index (index)}
             <button
-                class={`btn btn-sm m-1 ${option.is_secondary ? 'btn-outline-secondary': 'btn-outline-primary'}`}
+                class={`rcco-btn ${option.is_secondary ? 'rcco-btn-secondary' : 'rcco-btn-primary'}`}
                 in:fade={{ duration: duration }}
                 disabled={disabled}
-                on:click={(e) => handleClickOption(e, option)}
+                onclick={(e) => handleClickOption(e, option)}
             >
                 {option.title}
             </button>
         {/each}
     </div>
 {/if}
+

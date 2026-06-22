@@ -1,5 +1,6 @@
 import { endpoints } from '$lib/services/api-endpoints.js';
 import axios from 'axios';
+import qs from 'qs';
 
 /**
  * Get agent settings
@@ -15,9 +16,10 @@ export async function getSettings() {
  * Get agent list
  * @param {import('$agentTypes').AgentFilter} filter
  * @param {boolean} checkAuth
+ * @param {AbortSignal | null} signal
  * @returns {Promise<import('$commonTypes').PagedItems<import('$agentTypes').AgentModel>>}
  */
-export async function getAgents(filter, checkAuth = false) {
+export async function getAgents(filter, checkAuth = false, signal = null) {
     let url = endpoints.agentListUrl;
     const response = await axios.get(url, {
         params: {
@@ -27,7 +29,8 @@ export async function getAgents(filter, checkAuth = false) {
         paramsSerializer: {
             dots: true,
             indexes: null,
-        }
+        },
+        signal: signal || undefined
     });
     return response.data;
 }
@@ -113,11 +116,72 @@ export async function getAgentRuleOptions() {
 }
 
 /**
+ * Get agent rule options by agent id
+ * @param {string} agentId
+ * @returns {Promise<import('$agentTypes').AgentRule[]>}
+ */
+export async function getAgentRuleOptionsById(agentId) {
+    const url = endpoints.agentRuleOptionsByIdUrl.replace("{agentId}", agentId);
+    const response = await axios.get(url);
+    return response.data;
+}
+
+
+/**
  * Get agent labels
+ * @param {number?} [size]
  * @returns {Promise<string[]>}
  */
-export async function getAgentLabels() {
+export async function getAgentLabels(size = null) {
     const url = endpoints.agentLabelsUrl;
-    const response = await axios.get(url);
+    const response = await axios.get(url, {
+        params: { size: size }
+    });
+    return response.data;
+}
+
+
+/**
+ * Get agent code scripts
+ * @param {string} agentId
+ * @param {import('$agentTypes').AgentCodeScriptFilter?} filter
+ * @returns {Promise<import('$agentTypes').AgentCodeScriptViewModel[]>}
+ */
+export async function getAgentCodeScripts(agentId, filter = null) {
+    const url = endpoints.agentCodeScriptListUrl.replace("{agentId}", agentId);
+    const response = await axios.get(url, {
+        params: {
+            ...filter
+        },
+        paramsSerializer: (params) => qs.stringify(params, { encode: false, allowDots: true, arrayFormat: "indices" })
+    });
+    return response.data;
+}
+
+/**
+ * Update agent code scripts
+ * @param {string} agentId
+ * @param {import('$agentTypes').AgentCodeScriptUpdateModel} update
+ * @returns {Promise<boolean>}
+ */
+export async function updateAgentCodeScripts(agentId, update) {
+    const url = endpoints.agentCodeScriptUpdateUrl.replace("{agentId}", agentId);
+    const response = await axios.post(url, {
+        ...update
+    });
+    return response.data;
+}
+
+/**
+ * Generate agent code script
+ * @param {string} agentId
+ * @param {import('$agentTypes').AgentCodeScriptGenerateModel} request
+ * @returns {Promise<import('$agentTypes').CodeGenerationResult>}
+ */
+export async function generateAgentCodeScript(agentId, request) {
+    const url = endpoints.agentCodeScriptGenerateUrl.replace("{agentId}", agentId);
+    const response = await axios.post(url, {
+        ...request
+    });
     return response.data;
 }

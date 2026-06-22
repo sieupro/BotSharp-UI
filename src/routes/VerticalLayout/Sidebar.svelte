@@ -1,24 +1,28 @@
 <script>
-// @ts-nocheck
-
-	import { onMount, afterUpdate } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { browser } from '$app/environment';
+	import { goto, afterNavigate } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { _ } from 'svelte-i18n';
 	import 'overlayscrollbars/overlayscrollbars.css';
 	import { OverlayScrollbars } from 'overlayscrollbars';
-	import Link from 'svelte-link';
-	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
-	import { _ } from 'svelte-i18n';
 	import { globalEventStore } from '$lib/helpers/store';
+	import { getCleanUrl } from '$lib/helpers/utils/common';
 
-	/** @type {import('$pluginTypes').PluginMenuDefModel[]} */
-	export let menu;
+	/**
+	 * @type {{
+	 *   menu: import('$pluginTypes').PluginMenuDefModel[]
+	 * }}
+	 */
+	let { menu } = $props();
 
-	// after routing complete call afterUpdate function
-	afterUpdate(() => {
+	// after routing complete, update active menu state
+	afterNavigate(async () => {
+		await tick();
 		removeActiveDropdown();
-		const curUrl = getPathUrl();
+		const curUrl = getCleanUrl($page.url.pathname);
 		if (curUrl) {
-			let item = document.querySelector(".vertical-menu a[href='" + curUrl + "']");
+			const item = document.querySelector(".vertical-menu a[id='" + curUrl + "']");
 			if (item) {
 				item.classList.add('mm-active');
 				const parent1 = item.parentElement;
@@ -50,8 +54,8 @@
 
 	const options = {
 		scrollbars: {
-			visibility: 'auto', // You can adjust the visibility ('auto', 'hidden', 'visible')
-			autoHide: 'move', // You can adjust the auto-hide behavior ('move', 'scroll', false)
+			visibility: 'auto',
+			autoHide: 'move',
 			autoHideDelay: 100,
 			dragScroll: true,
 			clickScroll: false,
@@ -60,14 +64,29 @@
 		}
 	};
 
-	onMount(async () => {
-		const menuElement = document.querySelector('#vertical-menu');
-		OverlayScrollbars(menuElement, options);
-		activeMenu();
+	let isEmbeddingPage = $derived(!!$page.params.embed && !!$page.params.embedType);
 
-		const curUrl = getPathUrl();
+	$effect(() => {
+		if (browser) {
+			toggleEmbedPageSidebar(isEmbeddingPage);
+		}
+	});
+
+	onMount(async () => {
+		let scrollbarInstance = null;
+		const menuElement = document.querySelector('#vertical-menu');
+		// @ts-ignore
+		if (menuElement && !isEmbeddingPage) {
+			// @ts-ignore
+			scrollbarInstance = OverlayScrollbars(menuElement, options);
+		}
+
+		activeMenu();
+		setupCollapsedMenuPositioning();
+
+		const curUrl = getCleanUrl($page.url.pathname);
 		if (curUrl) {
-			let item = document.querySelector(".vertical-menu a[href='" + curUrl + "']");
+			const item = document.querySelector(".vertical-menu a[id='" + curUrl + "']");
 			if (item) {
 				item.classList.add('mm-active');
 				item.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -99,6 +118,41 @@
 
 		// menuItemScroll()
 	});
+
+	const setupCollapsedMenuPositioning = () => {
+		if (!browser) return;
+
+		const sideMenu = document.querySelector('#side-menu');
+		if (!sideMenu) return;
+
+		// Position fixed submenus on hover when sidebar is collapsed
+		sideMenu.querySelectorAll(':scope > li').forEach((li) => {
+			li.addEventListener('mouseenter', () => {
+				if (!document.body.classList.contains('vertical-collpsed')) return;
+
+				const submenu = li.querySelector(':scope > ul.sub-menu');
+				if (submenu) {
+					const rect = li.getBoundingClientRect();
+					// @ts-ignore
+					submenu.style.top = `${rect.top}px`;
+				}
+			});
+		});
+
+		// Position nested submenus
+		sideMenu.querySelectorAll('.sub-menu li').forEach((li) => {
+			li.addEventListener('mouseenter', () => {
+				if (!document.body.classList.contains('vertical-collpsed')) return;
+
+				const nestedSubmenu = li.querySelector(':scope > ul.sub-menu');
+				if (nestedSubmenu) {
+					const rect = li.getBoundingClientRect();
+					// @ts-ignore
+					nestedSubmenu.style.top = `${rect.top}px`;
+				}
+			});
+		});
+	};
 
 	const activeMenu = () => {
 		if (browser) {
@@ -181,70 +235,104 @@
 		});
 	};
 
-	const menuItemScroll = () => {
-		if (browser) {
-			const curUrl = getPathUrl();
-			let item = document.querySelector(".vertical-menu a[href='" + curUrl + "']")?.offsetTop;
-			if (item && item > 300) {
-				item = item - 300;
-				const menuElement = document.getElementById('vertical-menu');
-				menuElement?.scrollTo({
-					top: item,
-					behavior: 'smooth'
-				});
+	/** @param {boolean} isEmbeddingPage */
+	const toggleEmbedPageSidebar = (isEmbeddingPage) => {
+		const menuElement = document.querySelector('#vertical-menu');
+		if (isEmbeddingPage && !document.body.classList.contains('vertical-collpsed')) {
+			document.body.classList.add('vertical-collpsed');
+			document.body.classList.add('sidebar-enable');
+
+			if (menuElement) {
+				// @ts-ignore
+				const instance = OverlayScrollbars(menuElement, options);
+				if (instance) {
+					instance.destroy();
+				}
+			}
+		} else if (!isEmbeddingPage && document.body.classList.contains('vertical-collpsed')) {
+			document.body.classList.remove('vertical-collpsed');
+			document.body.classList.remove('sidebar-enable');
+
+			if (menuElement) {
+				// @ts-ignore
+				OverlayScrollbars(menuElement, options);
 			}
 		}
-	};
+	}
 
-	const getPathUrl = () => {
-		const path = $page.url.pathname;
-		return path?.startsWith('/') ? path.substring(1) : path;
-	};
+	/** @param {string} url */
+	const goToPage = (url) => {
+		if (!url) {
+			return;
+		}
 
-	const goToPage = () => {
+		url = getCleanUrl(url);
+		if (url === getCleanUrl($page.url.pathname)) {
+			return;
+		}
+
 		globalEventStore.reset();
+		goto(url);
 	}
 </script>
 
-<div class="vertical-menu">
-	<div class="h-100" id="vertical-menu">
+<div
+	class="vertical-menu fixed bottom-0 left-0 top-[var(--header-height)] z-[1001] w-[var(--sidebar-width)] bg-[var(--sidebar-bg)] shadow-sm transition-[width,transform] duration-200 dark:bg-gray-800"
+>
+	<div class="h-full" id="vertical-menu">
 		<!--- Sidemenu -->
-		<div id="sidebar-menu">
+		<div id="sidebar-menu" class="pt-2.5 pb-8">
 			<!-- Left Menu Start -->
-			<ul class="metismenu list-unstyled" id="side-menu">
+			<ul class="metismenu m-0 list-none p-0" id="side-menu">
 				{#each menu as item}
 					{#if item.isHeader}
-						<li class="menu-title" key="t-menu">{$_(item.label)}</li>
+						<li class="menu-title px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--sidebar-menu-title-color)]" key="t-menu">
+							{$_(item.label)}
+						</li>
 					{:else if item.subMenu}
 						<li>
-							<Link href={null} class="has-arrow waves-effect">
-								<i class={item.icon} />
+							<!-- svelte-ignore a11y_invalid_attribute -->
+							<a href="javascript:void(0);" class="has-arrow cursor-pointer">
+								<i class={item.icon}></i>
 								<span>{$_(item.label)}</span>
-							</Link>
+							</a>
 							<ul class="sub-menu mm-collapse">
 								{#each item.subMenu as subMenu}
 									{#if subMenu.isChildItem}
 										<li>
-											<Link href="#" class="has-arrow waves-effect">
+											<!-- svelte-ignore a11y_invalid_attribute -->
+											<a href="javascript:void(0);" class="has-arrow cursor-pointer">
 												<span>{$_(subMenu.label)}</span>
-											</Link>
+											</a>
 											<ul class="sub-menu mm-collapse">
 												{#each subMenu.childItems as childItem}
-													<li><Link href={childItem.link} on:click={() => goToPage()}>{$_(childItem.label)}</Link></li>
+													<li>
+														<!-- svelte-ignore a11y_invalid_attribute -->
+														<a href="javascript:void(0);" class="cursor-pointer" id={getCleanUrl(childItem.link)} onclick={() => goToPage(childItem.link)}>
+															{$_(childItem.label)}
+														</a>
+													</li>
 												{/each}
 											</ul>
 										</li>
 									{:else}
-										<li><Link href={subMenu.link} on:click={() => goToPage()}>{$_(subMenu.label)}</Link></li>
+										<li>
+											<!-- svelte-ignore a11y_invalid_attribute -->
+											<a href="javascript:void(0);" class="cursor-pointer" id={getCleanUrl(subMenu.link)} onclick={() => goToPage(subMenu.link)}>
+												{$_(subMenu.label)}
+											</a>
+										</li>
 									{/if}
 								{/each}
 							</ul>
 						</li>
 					{:else}
 						<li>
-							<Link class="waves-effect" href={item.link} on:click={() => goToPage()} >
-								<i class={item.icon} /> <span>{$_(item.label)}</span>
-							</Link>
+							<!-- svelte-ignore a11y_invalid_attribute -->
+							<a href="javascript:void(0);" class="cursor-pointer" id={getCleanUrl(item.link)} onclick={() => goToPage(item.link)}>
+								<i class={item.icon}></i>
+								<span>{$_(item.label)}</span>
+							</a>
 						</li>
 					{/if}
 				{/each}
@@ -252,3 +340,5 @@
 		</div>
 	</div>
 </div>
+
+

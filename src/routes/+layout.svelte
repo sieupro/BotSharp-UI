@@ -1,11 +1,20 @@
 <script>
+	import '@fontsource/poppins/300.css';
+	import '@fontsource/playfair-display/400.css';
+	import '@fontsource/pacifico/400.css';
+	import '@fontsource/lobster/400.css';
+	import '@fontsource/bebas-neue/400.css';
+	import '@fontsource/averia-libre/400.css';
+	import '@fontsource/libre-baskerville/400.css';
+	import '@fontsource/source-code-pro/400.css';
+	import '@fontsource/rethink-sans/400.css';
+
+	import '../app.css';
+	import '$lib/scss/icons.scss';
+	import '$lib/styles/app.scss';
 	import { addMessages, init, getLocaleFromNavigator } from 'svelte-i18n';
+	import { PUBLIC_PRIMARY_COLOR, PUBLIC_SECONDARY_COLOR } from '$env/static/public';
 	import en from '$lib/langs/en.json';
-	import '$lib/helpers/http';
-	import { onDestroy, onMount } from 'svelte';
-	import { globalErrorStore, loaderStore } from '$lib/helpers/store';
-	import Loader from '$lib/common/Loader.svelte';
-	import LoadingToComplete from '$lib/common/LoadingToComplete.svelte';
 
 	addMessages('en', en);
 
@@ -14,42 +23,19 @@
 		initialLocale: getLocaleFromNavigator()
 	});
 
-	/** @type {boolean} */
-	let isLoading = false;
-	let hasError = false;
+	const themeOverrides = [
+		PUBLIC_PRIMARY_COLOR && `--color-primary: ${PUBLIC_PRIMARY_COLOR};`,
+		PUBLIC_SECONDARY_COLOR && `--color-secondary: ${PUBLIC_SECONDARY_COLOR};`
+	]
+		.filter(Boolean)
+		.join(' ');
 
-	/** @type {any} */
-	let loaderUnsubscriber;
-	/** @type {any} */
-	let errorUnsubscriber;
-
-	onMount(() => {
-		window?.speechSynthesis?.cancel();
-		loaderUnsubscriber = loaderStore.subscribe(value => {
-			isLoading = value;
-		});
-
-		errorUnsubscriber = globalErrorStore.subscribe(value => {
-			hasError = value;
-		});
-	})
-
-	onDestroy(() => {
-		loaderUnsubscriber?.();
-		errorUnsubscriber?.();
-	});
+	const themeOverrideStyle = themeOverrides ? `<style>:root { ${themeOverrides} }</style>` : '';
 </script>
 
-{#if isLoading}
-	<Loader size={50}/>
-{/if}
-
-<LoadingToComplete isError={hasError} />
+<svelte:head>
+	{@html themeOverrideStyle}
+</svelte:head>
 
 <slot />
 
-<style lang="scss">
-	@import '$lib/scss/bootstrap.scss';
-	@import '$lib/scss/app.scss';
-	@import '$lib/scss/icons.scss';
-</style>

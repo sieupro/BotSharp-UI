@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const userKey = "user";
@@ -7,6 +7,8 @@ const conversationKey = "conversation";
 const conversationUserStatesKey = "conversation_user_states";
 const conversationSearchOptionKey = "conversation_search_option";
 const conversationUserMessageKey = "conversation_user_messages";
+const tenantKey = "tenant_id";
+const tenantNameKey = "tenant_name";
 
 /** @type {Writable<import('$commonTypes').GlobalEvent>} */
 const createGlobalEventStore = () => {
@@ -40,21 +42,93 @@ export const userStore = writable({ id: "", full_name: "", expires: 0, token: nu
  */
 export function getUserStore() {
     if (browser) {
-        // Access localStorage only if in the browser context
-        let json = localStorage.getItem(userKey);
-        if (json)
+        const storeValue = get(userStore);
+        if (storeValue?.token) {
+            return storeValue;
+        }
+
+        let json = sessionStorage.getItem(userKey);
+        if (json) {
             return JSON.parse(json);
-        else
-            return userStore;
-    } else {
-        // Return a default value for SSR
-        return userStore;
+        }
     }
+
+    return get(userStore);
 };
+
+
+/** @returns {string} */
+export function getTenantId() {
+    if (!browser) return '';
+    return sessionStorage.getItem(tenantKey) || '';
+}
+
+/** @param {string} tenantId */
+export function setTenantId(tenantId) {
+    if (!browser) return;
+    if (!tenantId) {
+        sessionStorage.removeItem(tenantKey);
+        return;
+    }
+    sessionStorage.setItem(tenantKey, tenantId);
+}
+
+export function clearTenantId() {
+    if (!browser) return;
+    sessionStorage.removeItem(tenantKey);
+}
+
+/** @returns {string} */
+export function getTenantName() {
+    if (!browser) return '';
+    return sessionStorage.getItem(tenantNameKey) || '';
+}
+
+/** @param {string} tenantName */
+export function setTenantName(tenantName) {
+    if (!browser) return;
+    if (!tenantName) {
+        sessionStorage.removeItem(tenantNameKey);
+    } else {
+        sessionStorage.setItem(tenantNameKey, tenantName);
+    }
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tenantChanged', {
+            detail: {
+                tenantId: getTenantId(),
+                tenantName: getTenantName()
+            }
+        }));
+    }
+}
+
+export function clearTenantName() {
+    if (!browser) return;
+    sessionStorage.removeItem(tenantNameKey);
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tenantChanged', {
+            detail: {
+                tenantId: getTenantId(),
+                tenantName: ''
+            }
+        }));
+    }
+}
+
+export function notifyTenantChanged() {
+    if (!browser || typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('tenantChanged', {
+        detail: {
+            tenantId: getTenantId(),
+            tenantName: getTenantName()
+        }
+    }));
+}
 
 userStore.subscribe(value => {
     if (browser && value.token) {
-        localStorage.setItem(userKey, JSON.stringify(value));
+        sessionStorage.setItem(userKey, JSON.stringify(value));
     }
 });
 
@@ -168,14 +242,14 @@ export const conversationSearchOptionStore = createConversationSearchOptionStore
 const createConversationUserMessageStore = () => {
     return {
         reset: () => {
-            localStorage.removeItem(conversationUserMessageKey);
+            sessionStorage.removeItem(conversationUserMessageKey);
         },
         get: () => {
-            const json = localStorage.getItem(conversationUserMessageKey);
+            const json = sessionStorage.getItem(conversationUserMessageKey);
             return json ? JSON.parse(json) : {};
         },
         put: (value) => {
-            localStorage.setItem(conversationUserMessageKey, JSON.stringify(value));
+            sessionStorage.setItem(conversationUserMessageKey, JSON.stringify(value));
         }
     }
 };
@@ -219,13 +293,33 @@ const createKnowledgeBaseDocumentStore = () => {
 export const knowledgeBaseDocumentStore = createKnowledgeBaseDocumentStore();
 
 
-export function resetLocalStorage(resetUser = false) {
+export function resetStorage(resetUser = false) {
     conversationUserStateStore.resetAll();
     conversationUserMessageStore.reset();
     conversationUserAttachmentStore.reset();
-    localStorage.removeItem('conversation');
+    clearLocalStorage(['message']);
 
     if (resetUser) {
-        localStorage.removeItem('user');
+        sessionStorage.removeItem(userKey);
+        sessionStorage.removeItem(tenantKey);
+        sessionStorage.removeItem(tenantNameKey);
+    }
+}
+
+/** @param {string[]?} keyPrefixes */
+function clearLocalStorage(keyPrefixes = null) {
+    if (!keyPrefixes) {
+        localStorage.clear();
+        return;
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        const found = keyPrefixes.find(x => key.startsWith(x));
+        if (found) {
+            localStorage.removeItem(key);
+        }
     }
 }

@@ -8,6 +8,8 @@
  * @property {string?} [uid]
  * @property {string} name
  * @property {string} content
+ * @property {string?} [response_format]
+ * @property {AgentTemplateConfig?} [llm_config]
  */
 
 /**
@@ -16,6 +18,17 @@
  * @property {string?} provider 
  * @property {string?} model
  * @property {number} max_recursion_depth
+ * @property {number?} [max_output_tokens]
+ * @property {string?} [reasoning_effort_level]
+ * @property {any} [image_composition]
+ * @property {any} [audio_transcription]
+ * @property {any} [realtime]
+ */
+
+/**
+ * @typedef {Object} AgentTemplateConfig
+ * @property {string?} provider 
+ * @property {string?} model
  * @property {number?} [max_output_tokens]
  * @property {string?} [reasoning_effort_level]
  */
@@ -32,7 +45,7 @@
  * @property {import('$commonTypes').Pagination} pager - Pagination
  * @property {string[]?} [types]
  * @property {string[]?} [agentNames]
- * @property {string} [similarName]
+ * @property {string?} [similarName]
  * @property {string[]?} [labels]
  * @property {boolean} [isPublic]
  * @property {boolean} [disabled]
@@ -105,6 +118,59 @@
  * @property {string} [direct_agent_id] - Run task directly in this agent.
  */
 
+/** 
+ * @typedef {Object} AgentCodeScriptFilter
+ * @property {string[]?} [scriptNames]
+ * @property {string[]?} [scriptTypes]
+ */
+
+
+/** 
+ * @typedef {Object} AgentCodeScriptViewModel
+ * @property {string?} [uid]
+ * @property {string} name
+ * @property {string} content
+ * @property {string} script_type
+ */
+
+/** 
+ * @typedef {Object} AgentCodeScriptUpdateOptions
+ * @property {boolean?} [delete_if_not_included]
+ * @property {boolean?} [is_upsert]
+ */
+
+/** 
+ * @typedef {Object} AgentCodeScriptUpdateModel
+ * @property {AgentCodeScriptViewModel[]?} [code_scripts]
+ * @property {AgentCodeScriptUpdateOptions?} [options]
+ */
+
+/** 
+ * @typedef {Object} AgentCodeScriptGenerateModel
+ * @property {string?} [text]
+ * @property {CodeProcessOptions?} [options]
+ */
+
+/** 
+ * @typedef {Object} CodeProcessOptions
+ * @property {boolean?} [save_to_db] - Whether to save the generated code to database.
+ * @property {string?} [script_name] - The code script name.
+ * @property {string?} [script_type] - The code script type.
+ * @property {string?} [agent_id] - The agent id.
+ * @property {string?} [template_name] - The template name.
+ * @property {any?} [data] - The template data.
+ * @property {string?} [provider] - The llm provider.
+ * @property {string?} [model] - The llm model.
+ */
+
+/** 
+ * @typedef {Object} CodeGenerationResult
+ * @property {boolean?} [success]
+ * @property {string?} [content]
+ * @property {string?} [language]
+ * @property {string?} [error_message]
+ */
+
 /**
  * @typedef {Object} ChannelInstruction
  * @property {string} [uid]
@@ -117,7 +183,7 @@
  * @property {string} type
  * @property {string} field
  * @property {string} description
- * @property {string} fieldType
+ * @property {string} [field_type]
  * @property {boolean} required
  * @property {string} redirectTo
  * @property {string?} [redirect_to_agent]
@@ -138,6 +204,7 @@
  * @property {boolean} disabled
  * @property {string?} [visibility_expression]
  * @property {UtilityItem[]} items
+ * @property {boolean} [expanded]
  */
 
 /**
@@ -156,6 +223,7 @@
  * @property {string} server_id 
  * @property {boolean} disabled 
  * @property {import('$commonTypes').NameBase[]} functions
+ * @property {boolean} [expanded]
  */
 
 /**
@@ -165,16 +233,20 @@
  * @property {string?} [displayName]
  * @property {boolean} disabled
  * @property {number?} [confidence]
+ * @property {boolean} [expanded]
  */
 
 /**
  * @typedef {Object} AgentRule
  * @property {string} trigger_name 
- * @property {string} criteria
  * @property {string?} [displayName]
  * @property {boolean} disabled
+ * @property {any?} [config]
+ * @property {any?} [output_args]
+ * @property {string?} [json_args]
+ * @property {string?} [statement]
+ * @property {boolean} [expanded]
  */
-
 
 /**
  * @typedef {Object} AgentTaskSearchOption

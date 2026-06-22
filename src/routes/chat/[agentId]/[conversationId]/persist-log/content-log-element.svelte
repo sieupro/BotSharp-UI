@@ -1,19 +1,20 @@
 <script>
-	import { Button } from '@sveltestrap/sveltestrap';
-    import Link from 'svelte-link/src/Link.svelte';
     import Markdown from "$lib/common/markdown/Markdown.svelte";
 	import { ContentLogSource } from '$lib/helpers/enums';
 	import { utcToLocal } from '$lib/helpers/datetime';
 	import { directToAgentPage } from '$lib/helpers/utils/common';
 
-    /** @type {import('$conversationTypes').ConversationContentLogModel} */
-    export let data;
+    /** @type {{ data: import('$conversationTypes').ConversationContentLogModel }} */
+    let { data } = $props();
 
-    let logDisplayStyle = '';
-    let logTextStyle = '';
-    let is_collapsed = true;
+    let is_collapsed = $state(true);
+    let contentEl = $state();
+    let isOverflowing = $state(false);
+    
+    const COLLAPSE_LINE_THRESHOLD = 10;
     const unknownAgent = "Uknown";
     const collapsedSources = [
+        ContentLogSource.UserInput,
         ContentLogSource.Prompt,
         ContentLogSource.AgentResponse,
         ContentLogSource.FunctionCall,
@@ -25,65 +26,94 @@
         ContentLogSource.FunctionCall,
     ];
 
-    $: {
-        logDisplayStyle = '';
-        logTextStyle = '';
+    let logDisplayStyle = $derived.by(() => {
         if (data.source === ContentLogSource.AgentResponse || data.source === ContentLogSource.Notification) {
-            logDisplayStyle = 'border border-secondary';
-            logTextStyle = 'text-info';
+            return '';
         } else if (data.source === ContentLogSource.FunctionCall) {
-            logDisplayStyle = 'bg-secondary';
+            return 'cle-bg-secondary';
         } else if (data.source === ContentLogSource.Prompt) {
-            logDisplayStyle = 'text-secondary';
+            return 'cle-text-secondary';
         } else if (data.source === ContentLogSource.HardRule) {
-            logDisplayStyle = 'text-warning';
+            return 'cle-text-warning';
         } else if (data.source === ContentLogSource.UserInput) {
-            logDisplayStyle = "bg-danger";
+            return 'cle-bg-danger';
         }
-    }
+        return '';
+    });
+
+    let logTextStyle = $derived.by(() => {
+        if (data.source === ContentLogSource.AgentResponse || data.source === ContentLogSource.Notification) {
+            return 'cle-text-info';
+        }
+        return '';
+    });
 
     /** @param {any} e */
     function toggleText(e) {
         e.preventDefault();
         is_collapsed = !is_collapsed;
     }
+
+    $effect(() => {
+        void data?.content;
+        if (!contentEl || !collapsedSources.includes(data.source)) {
+            isOverflowing = false;
+            return;
+        }
+        requestAnimationFrame(() => {
+            if (!contentEl) return;
+            const cs = getComputedStyle(contentEl);
+            let lineHeight = parseFloat(cs.lineHeight);
+            if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+                lineHeight = parseFloat(cs.fontSize) * 1.5 || 21;
+            }
+            isOverflowing = contentEl.scrollHeight > lineHeight * COLLAPSE_LINE_THRESHOLD + 1;
+        });
+    });
 </script>
 
-<div class="log-element rounded" style="padding: 3px;" id={`content-log-${data.message_id}`}>
-    <div class="log-meta text-secondary">
+
+<div class="cle-element" id={`content-log-${data.message_id}`}>
+    <div class="cle-meta">
         <div>
-            <span class="h4">
+            <span class="cle-title">
             {#if data?.agent_id?.length > 0}
-                <Link class="text-secondary text-decoration-underline" on:click={() => directToAgentPage(data.agent_id)}>
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <span
+                    class="cle-link"
+                    onclick={() => directToAgentPage(data.agent_id)}
+                >
                     {data.name || unknownAgent}
-                </Link>
+                </span>
             {:else}
-                <span class="text-secondary">
+                <span class="cle-text-secondary">
                     {data.name || unknownAgent}
                 </span>
             {/if}
             </span>
-            <span class="ms-2">{`${utcToLocal(data?.created_at, 'hh:mm:ss.SSS A, MMM DD YYYY')} `}</span>
+            <span class="cle-meta-ts">{`${utcToLocal(data?.created_at, 'hh:mm:ss.SSS A, MMM DD YYYY')} `}</span>
         </div>
     </div>
-    <div
-        class={`rounded log-content ${logDisplayStyle}`}
-        style="padding: 5px 8px;"
-    >
-        <div class:log-collapse={collapsedSources.includes(data.source) && !!is_collapsed}>
+    <div class={`cle-content ${logDisplayStyle}`}>
+        <div
+            bind:this={contentEl}
+            class:cle-collapse={collapsedSources.includes(data.source) && isOverflowing && !!is_collapsed}
+        >
             <Markdown containerClasses={logTextStyle} text={data?.content} rawText={rawTextSources.includes(data.source)} />
         </div>
 
-        {#if collapsedSources.includes(data.source)}
-            <Button class='toggle-btn btn-sm' color="link" on:click={(e) => toggleText(e)}>
+        {#if collapsedSources.includes(data.source) && isOverflowing}
+            <button class="cle-toggle-btn" onclick={(e) => toggleText(e)}>
                 {`${is_collapsed ? 'More +' : 'Less -'}`}
-            </Button>
+            </button>
         {/if}
     </div>
 
     {#if data.message_id && data.source === ContentLogSource.UserInput}
-    <div style="margin-top: 10px;">
-        {`MessageId: ${data.message_id}`}
+    <div class="cle-msg-id">
+        {`Message id: ${data.message_id}`}
     </div>
-    {/if}         
+    {/if}
 </div>
+

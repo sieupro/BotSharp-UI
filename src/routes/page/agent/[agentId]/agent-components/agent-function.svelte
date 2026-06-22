@@ -1,23 +1,30 @@
 <script>
-    import { JSONEditor, Mode } from 'svelte-jsoneditor';
     import { onMount } from 'svelte';
+    import { JSONEditor, Mode } from 'svelte-jsoneditor';
 
-    /** @type {import('$agentTypes').AgentModel} */
-    export let agent;
+    /**
+     * @type {{
+     *   agent: import('$agentTypes').AgentModel,
+     *   handleAgentChange?: () => void
+     * }}
+     */
+    let {
+        agent = $bindable(),
+        handleAgentChange = () => {}
+    } = $props();
 
-    /** @type {() => void} */
-    export let handleAgentChange = () => {};
-
-    export const fetchContent = () => {
+    export function fetchContent() {
         return content;
     }
 
-    export const refresh = () => init();
+    export function refresh() {
+        init();
+    }
 
     /** @type {import('svelte-jsoneditor').Content} */
-    let content = {
+    let content = $state({
         json: {}
-    };
+    });
 
     onMount(() => {
         init();
@@ -44,14 +51,7 @@
     }
 </script>
 
-<div class="my-json-editor">
+<div class="af-json-editor">
     <JSONEditor mode={Mode.table} content={content} onChange={handleChange} />
 </div>
 
-<style>
-    .my-json-editor {
-        /* define a custom theme color */
-        --jse-theme-color: var(--bs-primary);
-        --jse-theme-color-highlight: #687177;
-    }
-</style>
